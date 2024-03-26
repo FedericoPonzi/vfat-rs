@@ -2,7 +2,8 @@
 
 A simple VFAT implementation written in rust, and mostly tested against Linux's vfat driver.
 
-It aims to be simple to understand and easy to use in a custom kernel.
+It aims to be straightforward to understand and easy to use in a custom kernel. Currently supports reads and writes
+but it doesn't support renaming of files/directory and flush().
 
 ## no_std
 
@@ -58,23 +59,11 @@ sudo dosfsck -w -r -l -v -r /dev/loop13
 
 ---
 
-### TODO
-
-* Have a better update entry which allows to support renaming.
-* Test: What happens if there are no free clusters (memory is full)?
-
-## Long todo:
-
-* Write to backup FAT as well.
-* Free cluster summary update when allocating clusters.
-* Fix file flush. When flush is called, only the file related data should be flushed to disk.
-
 ### Future improvements.
 
 * Currently, the device mutex is shared behind an ARC reference. Maybe, also having the whole FS behind arc would save
   quite some space when
   returning files and directories. Because they get a copy of the Vfat struct.
-* Get rid of alloc dependency? It's mostly used for String support right now.
 
 ### FAQ
 

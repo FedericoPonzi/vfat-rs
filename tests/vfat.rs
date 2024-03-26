@@ -22,6 +22,7 @@ mod common;
 fn init() -> (FilebackedBlockDevice, MasterBootRecord, VfatFsRandomPath) {
     // If this is set to debug, for stress tests this produces a lot of logs that can cause OOM kill.
     std::env::set_var("RUST_LOG", "debug");
+    std::env::set_var("RUST_BACKTRACE", "1");
     let _ = env_logger::builder().is_test(true).try_init();
     let vfatfs_randompath = common::setup();
     let mut fs = FilebackedBlockDevice {
@@ -38,6 +39,7 @@ fn init() -> (FilebackedBlockDevice, MasterBootRecord, VfatFsRandomPath) {
     (fs, master_boot_record, vfatfs_randompath)
 }
 
+/// VfatFsRandomPath implements the Drop trait - so at the end of the test, it's automatically cleaned up.
 fn init_vfat() -> vfat_rs::Result<(VfatFS, VfatFsRandomPath)> {
     let (dev, master_boot_record, vfatfs_randompath) = init();
     //info!("start: {:#?}", master_boot_record);
@@ -490,8 +492,35 @@ fn test_delete_folder_non_empty() -> vfat_rs::Result<()> {
 
 #[ignore]
 #[test]
+fn test_disk_full() -> vfat_rs::Result<()> {
+    // before runnning this, update setup.sh to create a smaller vfat fs (say 5 mb).
+    println!("Starting stress test");
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+    println!("Starting stress test");
+    for i in 0..1000 {
+        let (file_name, file_path) = random_name("stress_test");
+        println!("Creating file: {}", file_name.as_str());
+        // 2. assert file does not exists
+        vfat.path_exists(file_path.as_str().into())
+            .expect("File already exists. Please delete it.");
 
-fn test_stress() -> vfat_rs::Result<()> {
-    // TODO: stress file creation
+        // 3. create file
+        let mut as_file = root
+            .create_file(file_name.clone())
+            .expect("Cannote create file");
+
+        // 4. Write CONTENT to file
+        const CONTENT: &[u8] = b"Hello, world! This is Vfat\n";
+        for i in 0..10000 {
+            as_file.write_all(CONTENT).expect("write all");
+        }
+        let mut as_file = vfat
+            .get_path(file_path.as_str().into())
+            .unwrap()
+            .into_file()
+            .unwrap();
+        println!("File's metadata: {:?}", as_file.metadata());
+    }
     Ok(())
 }

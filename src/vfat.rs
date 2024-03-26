@@ -3,7 +3,7 @@ use core::{fmt, mem};
 
 use binrw::io::Cursor;
 use binrw::BinReaderExt;
-use log::{debug, info};
+use log::{debug, info, trace};
 
 use crate::cluster::{cluster_reader, cluster_writer};
 use crate::fat_table::FatEntry;
@@ -159,7 +159,7 @@ impl VfatFS {
 
             for (id, fat_entry) in fat_entries.into_iter().enumerate() {
                 let cid = (ENTRIES_BUF_SIZE as u32 * i) + id as u32;
-                debug!("(cid: {:?}) Fat entry: {:?}", fat_entry, cid);
+                trace!("(cid: {:?}) Fat entry: {:?}", fat_entry, cid);
                 if let FatEntry::Unused = fat_entry {
                     debug!("Found an unused cluster with id: {}", cid);
                     return Ok(Some(ClusterId::new(cid)));

@@ -23,6 +23,7 @@ impl Drop for VfatFsRandomPath {
     fn drop(&mut self) {
         let dir = self.fs_path.parent().unwrap().to_path_buf();
         assert!(dir.is_dir());
+        // Additional safety. It might not be true for all OSs, but it is for Linux so all good
         assert!(dir.starts_with("/tmp/"));
         fs::remove_file(self.fs_path.clone()).unwrap();
         fs::remove_dir(dir).unwrap();

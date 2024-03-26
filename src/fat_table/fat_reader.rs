@@ -12,7 +12,6 @@ pub(crate) fn next_cluster(
     device: ArcMutex<CachedPartition>,
 ) -> Result<Option<ClusterId>> {
     let fat_entry = read_fat_entry(cluster_id, device)?;
-    // info!("Fat entry: {:?}", fat_entry);
     Ok(match fat_entry {
         FatEntry::DataCluster(id) => Some(ClusterId::new(id)),
         _ => None,
@@ -25,10 +24,6 @@ pub(crate) fn read_fat_entry(
 ) -> Result<FatEntry> {
     let mut buf = [0u8; FAT_ENTRY_SIZE];
     let (sector, offset) = get_params(&device, cluster_id)?;
-    /*info!(
-        "Requested cid: {}, sector: {}, offset in sector: {}",
-        cluster_id, sector, offset
-    );*/
     device
         .read_sector_offset(sector, offset, &mut buf)
         .map(|_| FatEntry::from(buf))

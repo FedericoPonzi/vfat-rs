@@ -280,7 +280,7 @@ impl Directory {
 
         let mut lfn_buff: Vec<(u8, String)> = Vec::new();
         for dir_entry in entries {
-            info!("Found entry: {:?}", dir_entry);
+            debug!("Found entry: {:?}", dir_entry);
             match dir_entry {
                 VfatDirectoryEntry::LongFileName(lfn) => {
                     lfn_buff.push((lfn.sequence_number.get_position(), lfn.collect_name()))
@@ -314,7 +314,7 @@ impl Directory {
                         regular.attributes,
                     );
 
-                    info!("Metadata: {:?}", metadata);
+                    debug!("Metadata: {:?}", metadata);
 
                     let new_fn = if regular.is_dir() {
                         VfatEntry::new_directory
@@ -364,7 +364,7 @@ impl Directory {
         target_name: String,
         new_entry: UnknownDirectoryEntry,
     ) -> error::Result<()> {
-        info!("Running update entry routine...");
+        debug!("Running update entry routine...");
         let mut lfn_buff: Vec<(u8, String)> = Vec::new();
 
         let entries = self.contents_direntry()?;

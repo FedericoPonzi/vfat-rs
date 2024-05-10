@@ -79,9 +79,8 @@ impl CachedPartition {
     ///
     /// To do so, it uses some useful info from the BPB section.
     pub(crate) fn cluster_to_sector(&self, cluster: ClusterId) -> SectorId {
-        let selected_sector =
-            u32::from(cluster).saturating_sub(2) * self.sectors_per_cluster as u32;
-        let sect = self.data_start_sector.0 as u32 + selected_sector as u32;
+        let selected_sector = u32::from(cluster).saturating_sub(2) * self.sectors_per_cluster;
+        let sect = self.data_start_sector.0 + selected_sector;
         SectorId(sect)
     }
 

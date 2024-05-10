@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Local, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use std::fs::OpenOptions;
 use vfat_rs::io::{SeekFrom, Write};
 
@@ -9,7 +9,7 @@ use serial_test::serial;
 use crate::common::VfatFsRandomPath;
 use block_devs::FilebackedBlockDevice;
 use vfat_rs::mbr::MasterBootRecord;
-use vfat_rs::{mbr, BlockDevice, Path, SectorId, VfatFS};
+use vfat_rs::{mbr, BlockDevice, PathBuf, SectorId, VfatFS};
 
 mod block_devs;
 mod common;
@@ -156,7 +156,7 @@ To eat the world's due, by the grave and thee.
 fn test_path() {
     init();
     let expected = "//folder/something";
-    let path = Path::from("/folder/something");
+    let path = PathBuf::from("/folder/something");
 
     #[cfg(feature = "std")]
     let path_str = path
@@ -225,10 +225,10 @@ fn test_get_root() -> vfat_rs::Result<()> {
     let (mut vfat, _f) = init_vfat()?;
     let entry = vfat.get_root().unwrap();
     assert_eq!(
-        entry.metadata.path().display().to_string(),
+        entry.metadata.full_path().display().to_string(),
         entry.metadata.name()
     );
-    assert_eq!(entry.metadata.path().display().to_string(), "/");
+    assert_eq!(entry.metadata.full_path().display().to_string(), "/");
     info!("Entry:{:?}", entry);
     Ok(())
 }
@@ -376,7 +376,6 @@ pub fn convert(num: f64) -> String {
 
 #[ignore]
 #[test]
-
 fn test_big_write_and_read() -> vfat_rs::Result<()> {
     // Write and read back a big file
     // The file size will be ITERATIONS * CONTENT.len()
@@ -432,13 +431,11 @@ fn test_big_write_and_read() -> vfat_rs::Result<()> {
 }
 
 #[test]
-
 fn test_create_directory_long() -> vfat_rs::Result<()> {
     test_create_directory("some-uncommonly-long-folder-name")
 }
 
 #[test]
-
 fn test_create_directory_short() -> vfat_rs::Result<()> {
     test_create_directory("fld")
 }
@@ -461,10 +458,10 @@ fn test_create_directory(prefix: &str) -> vfat_rs::Result<()> {
     let sub_dir = "prova";
     res.create_directory(sub_dir.to_string())?;
     let full_path = format!("/{}/{}", dir_name, sub_dir);
-    vfat.get_path(Path::from(full_path))?;
+    vfat.get_path(PathBuf::from(full_path))?;
 
     // Cleanup:
-    vfat.get_path(Path::from(dir_path))?
+    vfat.get_path(PathBuf::from(dir_path))?
         .into_directory_unchecked()
         .delete(sub_dir.to_string())?;
     vfat.get_root()?.delete(dir_name.to_string())?;
@@ -472,7 +469,6 @@ fn test_create_directory(prefix: &str) -> vfat_rs::Result<()> {
 }
 
 #[test]
-
 fn test_delete_folder_non_empty() -> vfat_rs::Result<()> {
     let (folder_name, _folder_path) = random_name("delfld");
     let (mut vfat, _f) = init_vfat()?;

@@ -97,7 +97,7 @@ impl RegularDirectoryEntry {
         let ext = self
             .extension()
             .map(|ext| format!(".{}", String::from_utf8_lossy(ext)))
-            .unwrap_or_else(String::new);
+            .unwrap_or_default();
         format!("{}{}", name, ext)
     }
     fn early_terminate_pos(v: &[u8]) -> usize {

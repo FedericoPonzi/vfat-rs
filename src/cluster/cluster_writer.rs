@@ -94,7 +94,7 @@ impl ClusterChainWriter {
                 self.offset_byte_in_current_sector = 0;
             }
         }
-        debug!("CWW: Amount writen: {}", amount);
+        debug!("CWW: Amount written: {}", amount);
         Ok(amount)
     }
 

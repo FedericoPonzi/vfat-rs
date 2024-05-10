@@ -2,17 +2,40 @@
 
 A simple VFAT implementation written in rust, and mostly tested against Linux's vfat driver.
 
-It aims to be straightforward to understand and easy to use in a custom kernel. Currently supports reads and writes
-but it doesn't support renaming of files/directory and flush().
+It aims to be straightforward to understand and easy to use in a custom kernel. Currently, supports:
+
+* File and directory creation,
+* File reading and writing,
+* Partial directory and file deletion. Deletion updates the entry's metadata to mark it as deleted, but it's never
+  garbage collected
+* Partial renaming support.
+
+Needs:
+
+* Better deletion support.
+* Better renaming support. When you rename an object, the metadata size can grow or shrink.
+* Flushing and actual usage of the cache.
 
 ## no_std
 
-This component was first developed with no_std in mind. `std` is mostly supported behind a feature flag.
-Check example/simple.rs for a usage example.
+This component was first developed with no_std in mind. `std` is supported behind a feature flag, and it is mostly used
+to
+ease testing. Check example/simple.rs for a usage example.
+
+The exported apis are in the api crate. You should implement the TimestampTrait which interfaces with your OS's time
+driver
+if you care to have accurate creation/deletion timestamps. Alloc support is also needed.
 
 ## Run example
 
-To run the example, first create a vfat fs using tests/setup.sh then run the example file using:
+To run the example, first create a vfat fs using the script `tests/setup.sh`. This script:
+
+* creates a vfat fs,
+* mounts it,
+* writes a bounch of files and directory
+* unmounts it.
+
+It needs sudo access for mount and unmount. Then you're ready to run the example file using:
 
 ```bash
 cargo run --example simple --feature std
@@ -58,20 +81,6 @@ sudo dosfsck -w -r -l -v -r /dev/loop13
 ```
 
 ---
-
-### Future improvements.
-
-* Currently, the device mutex is shared behind an ARC reference. Maybe, also having the whole FS behind arc would save
-  quite some space when
-  returning files and directories. Because they get a copy of the Vfat struct.
-
-### FAQ
-
-* What happens if I have a "File" handle and meanwhile someone deletes this file and
-  I try to read from a deleted file?
-  This case should be taken care of by the application using this library.
-
---
 
 ## Useful docs:
 

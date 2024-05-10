@@ -1,7 +1,7 @@
 use crate::api::directory_entry::Attributes;
 use crate::api::timestamp::VfatTimestamp;
 use crate::ClusterId;
-use crate::Path;
+use crate::PathBuf;
 use alloc::string::String;
 
 /// Metadatas are common to every entry type.
@@ -15,11 +15,11 @@ pub struct Metadata {
     /// occupied by the metadatas of the contained files.
     pub(crate) size: u32,
     /// The path to this file - it does include the file name.
-    path: Path,
-    /// empty files with size 0 should have first cluster 0.
+    path: PathBuf,
+    /// empty files with size 0 should have first Cluster == 0.
     pub(crate) cluster: ClusterId,
     /// The path to this file - it doesn't include the file name.
-    parent: Path,
+    parent: PathBuf,
     pub(crate) attributes: Attributes,
 }
 
@@ -30,9 +30,9 @@ impl Metadata {
         //last_access: VfatTimestamp,
         name: S,
         size: u32,
-        path: Path,
+        path: PathBuf,
         cluster: ClusterId,
-        parent: Path,
+        parent: PathBuf,
         attributes: Attributes,
     ) -> Self {
         Self {
@@ -68,13 +68,16 @@ impl Metadata {
         Some(self.creation)
     }
 
-    pub fn path(&self) -> &Path {
+    pub fn full_path(&self) -> &PathBuf {
         &self.path
     }
-    pub(crate) fn parent(&self) -> &Path {
+    pub(crate) fn parent(&self) -> &PathBuf {
         &self.parent
     }
     pub fn name(&self) -> &str {
         &self.name
+    }
+    pub(crate) fn has_no_cluster_allocated(&self) -> bool {
+        self.cluster == ClusterId::new(0)
     }
 }

@@ -15,7 +15,7 @@ use crate::{
     RegularDirectoryEntry, SectorId, UnknownDirectoryEntry, VfatDirectoryEntry, VfatEntry,
     VfatRsError, EBPF_VFAT_MAGIC, EBPF_VFAT_MAGIC_ALT,
 };
-use crate::{Path, TimeManagerTrait};
+use crate::{PathBuf, TimeManagerTrait};
 
 #[derive(Clone)]
 pub struct VfatFS {
@@ -88,7 +88,7 @@ impl VfatFS {
             (partition_start_sector + full_ebpb.bpb.reserved_sectors as u32).into();
         let fats_total_size = full_ebpb.extended.sectors_per_fat * full_ebpb.bpb.fat_amount as u32;
         let data_start_sector =
-            fat_start_sector + fats_total_size as u32 + full_ebpb.sectors_occupied_by_all_fats();
+            fat_start_sector + fats_total_size + full_ebpb.sectors_occupied_by_all_fats();
         let data_start_sector = SectorId(data_start_sector);
 
         let sectors_per_cluster = full_ebpb.bpb.sectors_per_cluster as u32;
@@ -233,9 +233,9 @@ impl VfatFS {
 
     /// p should start with `/`.
     /// Test with a path to a file, test with a path to root.
-    pub fn get_path(&mut self, path: Path) -> Result<VfatEntry> {
+    pub fn get_path(&mut self, path: PathBuf) -> Result<VfatEntry> {
         info!("FS: requested path: {:?}", path);
-        if path == Path::from("/") {
+        if path == PathBuf::from("/") {
             return self.get_root().map(From::from);
         }
         let mut path_iter = path.iter();
@@ -268,10 +268,10 @@ impl VfatFS {
         Ok(current_entry)
     }
 
-    pub fn path_exists(&mut self, path: Path) -> Result<bool> {
+    pub fn path_exists(&mut self, path: PathBuf) -> Result<bool> {
         let entry = self.get_path(path).map(|_| true);
         match entry {
-            Err(error) if matches!(error, VfatRsError::EntryNotFound { .. }) => Ok(false),
+            Err(VfatRsError::EntryNotFound { .. }) => Ok(false),
             x => x,
         }
     }
@@ -295,9 +295,9 @@ impl VfatFS {
             volume_id.last_modification_time,
             "/",
             mem::size_of::<RegularDirectoryEntry>() as u32,
-            Path::from("/"),
+            PathBuf::from("/"),
             self.root_cluster,
-            Path::from(""),
+            PathBuf::from(""),
             Attributes::new_directory(),
         );
         Ok(Directory::new(self.clone(), metadata))
@@ -306,7 +306,8 @@ impl VfatFS {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
+    use alloc::sync::Arc;
+    use alloc::vec::Vec;
 
     use crate::fat_table::FAT_ENTRY_SIZE;
     use crate::io::Write;

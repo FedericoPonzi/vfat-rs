@@ -5,13 +5,14 @@ use crate::ClusterId;
 pub(crate) const FAT_ENTRY_SIZE: usize = mem::size_of::<u32>();
 
 /// A fat32 row entry. Each entry represents a cluster. This is the "high level" view
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 #[repr(C)]
 pub(crate) enum FatEntry {
     /// Entry 0, formatted as 0xFFFFFFFN
     #[allow(dead_code)]
     Id(u32),
     /// A free, unused cluster. 0x00
+    #[default]
     Unused,
     /// 0x01: reserved
     Reserved(u32),
@@ -19,12 +20,6 @@ pub(crate) enum FatEntry {
     DataCluster(u32),
     /// Last cluster in chain. Should be, but may not be, the EndOfChainMarker (e.g. entry 1).
     LastCluster(u32),
-}
-
-impl Default for FatEntry {
-    fn default() -> Self {
-        FatEntry::Unused
-    }
 }
 
 impl FatEntry {

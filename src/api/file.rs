@@ -5,7 +5,7 @@ use core::{cmp, fmt};
 use log::{debug, info};
 
 use crate::api::Metadata;
-use crate::{error, ClusterId, Result, VfatFS};
+use crate::{error, ClusterId, PathBuf, Result, VfatFS};
 
 /// A File representation in a VfatFilesystem.
 //#[derive(Clone)]
@@ -62,36 +62,42 @@ impl File {
             .unwrap()
             .update_entry(self.metadata.clone())
     }
+    fn full_path(&self) -> &PathBuf {
+        return self.metadata.full_path();
+    }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<usize> {
         if buf.is_empty() {
             return Ok(0);
         }
-        debug!("Requested write on file.");
-        if self.metadata.cluster == ClusterId::new(0) {
-            debug!("File's cluster is none.");
+        debug!("{:?}: requested write", self.full_path(),);
+        if self.metadata.has_no_cluster_allocated() {
+            debug!("{:?}: has no cluster allocated.", self.full_path());
             self.metadata.cluster = self.vfat_filesystem.allocate_cluster_new_entry()?;
             debug!(
-                "Allocated cluster to file: {}, updating metadata...",
+                "{:?}: allocated Cluster('{}'), updating metadata...",
+                self.full_path(),
                 self.metadata.cluster
             );
             self.update_metadata()?;
-            debug!("Updated metadata");
         }
         let mut ccw = self
             .vfat_filesystem
             .cluster_chain_writer(self.metadata.cluster);
 
         ccw.seek(self.offset)?;
-
         info!(
-            "File: Write: Clusterid: {} amount to write: {}, offset: {}",
+            "{:?}: Writing with initial cluster: {}, offset: {}",
+            self.full_path(),
             self.metadata.cluster,
-            buf.len(),
-            self.offset,
+            self.offset
         );
         let amount_written = ccw.write(buf)?;
-        info!("File: Write: Amount written: {}", amount_written);
+        info!(
+            "{:?}: Write: Amount written: {}",
+            self.full_path(),
+            amount_written
+        );
         self.update_file_size(amount_written)?;
         self.offset += amount_written;
 

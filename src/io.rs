@@ -4,7 +4,7 @@
 
 pub type Result<T> = core::result::Result<T, Error>;
 #[cfg(not(feature = "std"))]
-pub use io::*;
+pub use nonstd_io::*;
 
 #[cfg(feature = "std")]
 pub use std_io::*;
@@ -20,7 +20,7 @@ mod std_io {
 }
 
 #[cfg(not(feature = "std"))]
-mod io {
+mod nonstd_io {
     use crate::VfatRsError;
     use core::cmp;
     use core::fmt;

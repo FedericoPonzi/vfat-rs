@@ -60,6 +60,76 @@ impl VfatTimestamp {
         self.get_value(Self::SECONDS) * 2
     }
 }
+
+type UnixTimestamp = u64;
+
+impl From<UnixTimestamp> for VfatTimestamp {
+    fn from(value: u64) -> Self {
+        let is_leap_year = |year| -> bool { (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 };
+        const SECONDS_IN_MINUTE: u32 = 60;
+        const SECONDS_IN_HOUR: u32 = 60 * SECONDS_IN_MINUTE;
+        const SECONDS_IN_DAY: u32 = 24 * SECONDS_IN_HOUR;
+
+        let mut remaining_seconds = value as u32;
+
+        let mut days_since_1970 = remaining_seconds / SECONDS_IN_DAY;
+        remaining_seconds %= SECONDS_IN_DAY;
+
+        let mut year = 1970u32;
+        let mut day_count;
+
+        loop {
+            day_count = if is_leap_year(year) { 366 } else { 365 };
+            if days_since_1970 >= day_count {
+                days_since_1970 -= day_count;
+                year += 1;
+            } else {
+                break;
+            }
+        }
+
+        let mut month = 1u32;
+        let days_in_month = [
+            31,
+            28 + (is_leap_year(year) as u32),
+            31,
+            30,
+            31,
+            30,
+            31,
+            31,
+            30,
+            31,
+            30,
+            31,
+        ];
+
+        while days_since_1970 >= days_in_month[(month - 1) as usize] {
+            days_since_1970 -= days_in_month[(month - 1) as usize];
+            month += 1;
+        }
+
+        let day = days_since_1970 + 1;
+        let hour = remaining_seconds / SECONDS_IN_HOUR;
+        remaining_seconds %= SECONDS_IN_HOUR;
+        let minute = remaining_seconds / SECONDS_IN_MINUTE;
+        let second = remaining_seconds % SECONDS_IN_MINUTE;
+
+        let mut timestamp = VfatTimestamp::new(0);
+
+        timestamp
+            // 1980 is the min in vfat timestamps.
+            .set_year(year)
+            .set_value(month, VfatTimestamp::MONTH)
+            .set_value(day, VfatTimestamp::DAY)
+            .set_value(hour, VfatTimestamp::HOURS)
+            .set_value(minute, VfatTimestamp::MINUTES)
+            .set_seconds(second); // VFAT has a 2-second resolution
+
+        timestamp
+    }
+}
+
 impl Display for VfatTimestamp {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
@@ -113,5 +183,10 @@ mod tests {
         assert_eq!(timestamp.hour(), 5);
         assert_eq!(timestamp.minute(), 6);
         assert_eq!(timestamp.second(), 16);
+    }
+
+    #[test]
+    fn test_vfattimestamp_from_unixtimestamp() {
+        // TODO
     }
 }

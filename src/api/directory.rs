@@ -12,7 +12,7 @@ use crate::api::directory_entry::{
 };
 use crate::api::{File, Metadata, VfatEntry};
 use crate::cluster::cluster_reader::ClusterChainReader;
-use crate::{error, Path};
+use crate::{error, PathBuf};
 use crate::{ClusterId, VfatFS, VfatMetadataTrait};
 
 // TODO: this assumes sector size
@@ -103,7 +103,7 @@ impl Directory {
         info!(
             "Going to use as metadata: {:?}. self metadatapath= '{}', selfmetadata name = '{}'. My attributes: {:?}, cluster: {:?}",
             metadata,
-            self.metadata.path().display(),
+            self.metadata.full_path().display(),
             self.metadata.name(),
             self.metadata.attributes,
             self.metadata.cluster
@@ -172,7 +172,11 @@ impl Directory {
         entry_name: &str,
         entry_type: &EntryType,
     ) -> error::Result<Metadata> {
-        let path = Path::from(format!("{}{}", self.metadata.path().display(), entry_name));
+        let path = PathBuf::from(format!(
+            "{}{}",
+            self.metadata.full_path().display(),
+            entry_name
+        ));
         let attributes = Self::attributes_from_entry(entry_type);
         let cluster_id = match entry_type {
             // No need to allocate a new cluster
@@ -193,7 +197,7 @@ impl Directory {
             size,
             path,
             cluster_id,
-            self.metadata.path().clone(),
+            self.metadata.full_path().clone(),
             attributes,
         );
         Ok(metadata)
@@ -220,7 +224,7 @@ impl Directory {
             })
     }
 
-    //TOOD: test pseudo dir deletion.
+    //TODO: test pseudo dir deletion.
     pub fn delete(&mut self, target_name: String) -> error::Result<()> {
         info!("Starting delete routine for entry: '{}'. ", target_name);
         info!("Directory contents: {:?}", self.contents()?);
@@ -297,9 +301,9 @@ impl Directory {
                         regular.full_name()
                     };
 
-                    let path = Path::from(format!(
+                    let path = PathBuf::from(format!(
                         "{}{name}{}",
-                        self.metadata.path().display(),
+                        self.metadata.full_path().display(),
                         if regular.is_dir() { "/" } else { "" }
                     ));
 
@@ -310,7 +314,7 @@ impl Directory {
                         regular.file_size,
                         path,
                         regular.cluster(),
-                        self.metadata.path().clone(),
+                        self.metadata.full_path().clone(),
                         regular.attributes,
                     );
 

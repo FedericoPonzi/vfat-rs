@@ -318,23 +318,6 @@ impl VfatDirectoryEntry {
         ret
     }
 }
-trait ToUtf16<const T: usize> {
-    fn into_utf16(self) -> [u16; T];
-}
-impl<const T: usize> ToUtf16<T> for &str {
-    fn into_utf16(self) -> [u16; T] {
-        let padding = || iter::repeat(0x00u16);
-        self.as_bytes()
-            .iter()
-            .map(|v| *v as u16)
-            .chain(padding())
-            .take(T)
-            .collect::<Vec<u16>>()
-            .as_slice()
-            .try_into()
-            .unwrap()
-    }
-}
 
 #[cfg(test)]
 mod test {

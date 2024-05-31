@@ -11,12 +11,12 @@ mod fat_entry;
 mod fat_reader;
 mod fat_writer;
 
-/// Given a cluster_id, returns the sector id to read in order to get the FAT table entry for
+/// Given a cluster_id, returns the sector id to read to get the FAT table entry for
 /// this cluster id.
 fn get_params(device: &CachedPartition, cluster_id: ClusterId) -> error::Result<(SectorId, usize)> {
     // this should be 512 / 32 = 18
     let fat_entries_per_sector = device.sector_size / FAT_ENTRY_SIZE;
-    // In which sector is this cid contained. Cid: 222 / 18 = 12.3333
+    // In which sector is this cid contained? Cid: 222 / 18 = 12.3333
 
     let containing_sector = (f64::from(cluster_id) / fat_entries_per_sector as f64).floor() as u32;
     // The sector is 12, now let's calculate the offset in that sector: 222 % 18 = 6.

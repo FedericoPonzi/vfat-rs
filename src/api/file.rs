@@ -37,7 +37,7 @@ impl File {
         &self.metadata
     }
 
-    pub fn update_file_size(&mut self, amount_written: usize) -> Result<()> {
+    fn update_file_size(&mut self, amount_written: usize) -> Result<()> {
         if self.offset + amount_written <= self.metadata.size as usize {
             return Ok(());
         }
@@ -54,12 +54,11 @@ impl File {
         self.update_metadata()
     }
 
-    pub fn update_metadata(&mut self) -> Result<()> {
+    fn update_metadata(&mut self) -> Result<()> {
         debug!("Going to update metadata on disk...");
         self.vfat_filesystem
             .get_path(self.metadata.parent().clone())?
-            .into_directory()
-            .unwrap()
+            .into_directory_unchecked()
             .update_entry(self.metadata.clone())
     }
     fn full_path(&self) -> &PathBuf {

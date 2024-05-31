@@ -406,6 +406,7 @@ impl Directory {
     }
 
     // Replace entry with index `index` with input `entry`.
+    // TODO: when reading the file, keep the index around to avoid scanning to locate the file again.
     pub(crate) fn update_entry_by_index(
         &self,
         entry: UnknownDirectoryEntry,

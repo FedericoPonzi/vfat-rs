@@ -10,18 +10,22 @@ It supports all the basic operations:
 * File reading and writing,
 * Directory and file deletion.
 
-It needs a better support for deletion. Deletion updates the entry's metadata in the directory and mark it as deleted,
+It needs better support for reusing deleted space. Deletion updates the entry's metadata in the directory and marks it
+as deleted,
 but it's never garbage collected (this would be done by a defrag tool) nor reused.
 
 ## no_std
 
-This component was first developed with no_std in mind. `std` is supported behind a feature flag, and it is mostly used
-to
-ease testing. Check example/simple.rs for a usage example.
+This component was first developed with `no_std` in mind. `std` is supported behind a feature flag, and it is used
+for integration testing.
 
-The exported apis are in the api crate. You should implement the TimestampTrait which interfaces with your OS's time
-driver
-if you care to have accurate creation/deletion timestamps. Alloc support is also needed.
+## Using it in your kernel
+
+The exported apis are in the api module. The OS should provide:
+
+* An implementation for the `TimestampTrait`. This is used for timestamping file creation and update.
+* An implementation for the device trait. This is used to interact with the disk.
+* Alloc support. It is mostly used to allocate some vec and strings, it might be put behind a feature flag later on.
 
 ## Run example
 
@@ -29,10 +33,12 @@ To run the example, first create a vfat fs using the script `tests/setup.sh`. Th
 
 * creates a vfat fs,
 * mounts it,
-* writes a bounch of files and directory
+* writes a bunch of files and directories (using your kernel's driver)
 * unmounts it.
 
-It needs sudo access for mount and unmount. Then you're ready to run the example file using:
+This file is also used for running integration tests. It needs sudo access for `mount` and `unmount` commands.
+
+Then you're ready to run the example file using:
 
 ```bash
 cargo run --example simple --features std
@@ -46,10 +52,11 @@ To run the setup.sh script, I've added an exception for my user in the sudoers f
 fponzi ALL=(ALL) NOPASSWD: /usr/bin/mount,/usr/bin/umount
 ```
 
-On github actions (CI) it just works, because the user has passwordless sudo.
+On Github actions (CI) it just works because the user has passwordless sudo.
+
 Then all tests can be run with `cargo test`. Each test in vfat.rs will create and delete a vfat filesystem.
 
-### Utils:
+### Some vfat related utilities
 
 You can check whether the file contains a valid MBR via `gdisk`:
 

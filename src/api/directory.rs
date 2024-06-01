@@ -8,8 +8,8 @@ use snafu::ensure;
 
 use crate::api::directory_entry::EntryId::Deleted;
 use crate::api::directory_entry::{
-    unknown_entry_convert_to_bytes_2, Attributes, EntryId, LongFileNameEntry,
-    RegularDirectoryEntry, UnknownDirectoryEntry, VfatDirectoryEntry,
+    unknown_entry_convert_to_bytes_2, Attributes, LongFileNameEntry, RegularDirectoryEntry,
+    UnknownDirectoryEntry, VfatDirectoryEntry,
 };
 use crate::api::{File, Metadata, VfatEntry};
 use crate::cluster::cluster_reader::ClusterChainReader;
@@ -288,9 +288,7 @@ impl Directory {
                     let name = if !lfn_name_buff.is_empty() {
                         // sort lfn_name_buff by first element of the tuple
                         lfn_name_buff.sort();
-                        let file_name = Self::string_from_lfn(lfn_name_buff);
-                        // prepare the buffer for the next file.
-                        file_name
+                        Self::string_from_lfn(lfn_name_buff)
                     } else {
                         regular.full_name()
                     };

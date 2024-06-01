@@ -76,7 +76,16 @@ fn test_read_bios_parameter_block() {
 fn test_read_file() -> vfat_rs::Result<()> {
     let (mut vfat, _f) = init_vfat()?;
     let expected_content = "Hello, Iris OS!".to_string();
-    let mut file = vfat.get_path("/hello.txt".into())?.into_file().unwrap();
+    // this file is created by setup script.
+    assert!(
+        vfat.path_exists("/hello.txt".into())?,
+        "File doesn't exists. Please run setup script."
+    );
+
+    let mut file = vfat
+        .get_from_absolute_path("/hello.txt".into())?
+        .into_file()
+        .unwrap();
     let mut buf = [0; 512];
     file.read(&mut buf)?;
     assert_eq!(
@@ -99,16 +108,15 @@ And, tender churl, makest waste in niggarding.
 Pity the world, or else this glutton be,
 To eat the world's due, by the grave and thee.
 ";
-
+    // this file is created by setup script.
+    assert!(
+        vfat.path_exists("/a-big-file.txt".into())?,
+        "File doesn't exists. Please run setup script."
+    );
     let mut file = vfat
-        .get_path("/a-big-file.txt".into())?
+        .get_from_absolute_path("/a-big-file.txt".into())?
         .into_file()
         .unwrap();
-    info!(
-        "Big file found!, size: {}, file size: {}",
-        LONG_FILE.len(),
-        file.metadata().size()
-    );
 
     let mut buf = [0; LONG_FILE.len()];
     file.read(&mut buf)?;
@@ -145,7 +153,7 @@ To eat the world's due, by the grave and thee.
     // Seek to 0:
     file.seek(SeekFrom::End(-(LONG_FILE.len() as i64)))?;
     // seek to -1:
-    file.seek(SeekFrom::End(-(LONG_FILE.len() as i64 + 1 as i64)))
+    file.seek(SeekFrom::End(-(LONG_FILE.len() as i64 + 1_i64)))
         .unwrap_err();
 
     Ok(())
@@ -174,8 +182,9 @@ fn test_get_path() -> vfat_rs::Result<()> {
     use vfat_rs::VfatMetadataTrait;
 
     let (mut vfat, _f) = init_vfat()?;
-    vfat.get_path("/not-found.txt".into()).unwrap_err();
-    let file = vfat.get_path("/hello.txt".into()).unwrap();
+    vfat.get_from_absolute_path("/not-found.txt".into())
+        .unwrap_err();
+    let file = vfat.get_from_absolute_path("/hello.txt".into()).unwrap();
     let local: DateTime<Utc> = Utc::now();
 
     // these are add by the local os's vfat implementation
@@ -188,7 +197,7 @@ fn test_get_path() -> vfat_rs::Result<()> {
     assert!(file.creation().second() <= 60);
     info!("Hello txt found!");
     assert!(vfat
-        .get_path("/folder/some/deep/nested/folder/file".into())
+        .get_from_absolute_path("/folder/some/deep/nested/folder/file".into())
         .is_ok());
     Ok(())
 }
@@ -233,12 +242,12 @@ fn test_get_root() -> vfat_rs::Result<()> {
 }
 
 #[test]
-fn test_write_side_short() -> vfat_rs::Result<()> {
+fn test_file_write_name_short() -> vfat_rs::Result<()> {
     test_file_write("fl")
 }
 
 #[test]
-fn test_file_write_long() -> vfat_rs::Result<()> {
+fn test_file_write_name_long() -> vfat_rs::Result<()> {
     test_file_write("a-very-long-file-name")?;
     test_file_write("a-very-long-file-name-but-one-which-is-very-very-long")
 }
@@ -302,20 +311,26 @@ fn test_file_write(name: &str) -> vfat_rs::Result<()> {
     let mut root = vfat.get_root()?;
 
     // 2. assert file does not exists
-    vfat.path_exists(file_path.as_str().into())
-        .expect("File already exists. Please delete it.");
+    assert!(
+        !vfat.path_exists(file_path.clone().into())?,
+        "File already exists. Please delete it."
+    );
 
     // 3. create file
     let mut as_file = root
         .create_file(file_name.clone())
         .expect("Cannote create file");
+    assert!(
+        vfat.path_exists(file_path.clone().into())?,
+        "File already exists. Please delete it."
+    );
 
     // 4. Write CONTENT to file
     const CONTENT: &[u8] = b"Hello, world! This is Vfat\n";
     as_file.write_all(CONTENT).expect("write all");
 
     let mut as_file = vfat
-        .get_path(file_path.as_str().into())
+        .get_from_absolute_path(file_path.as_str().into())
         .unwrap()
         .into_file()
         .unwrap();
@@ -347,8 +362,8 @@ fn test_file_write(name: &str) -> vfat_rs::Result<()> {
     assert_eq!(CONTENT, &double_buf[CONTENT.len()..], "second half");
 
     root.delete(file_name).expect("delete file");
-    // 6. assert file does not exists
-    let _file = vfat.get_path(file_path.as_str().into()).unwrap_err();
+    // 6. assert file does not exist
+    assert!(!vfat.path_exists(file_path.into())?);
     Ok(())
 }
 
@@ -373,12 +388,12 @@ pub fn convert(num: f64) -> String {
     format!("{}{} {}", negative, pretty_bytes, unit)
 }
 
-#[ignore]
 #[test]
+#[ignore]
 fn test_big_write_and_read() -> vfat_rs::Result<()> {
     // Write and read back a big file
     // The file size will be ITERATIONS * CONTENT.len()
-    const ITERATIONS: usize = 4000;
+    const ITERATIONS: usize = 1000;
     println!(
         "Starting big write and read, filesize will be: {}",
         convert(ITERATIONS as f64 * CONTENT.len() as f64)
@@ -387,7 +402,7 @@ fn test_big_write_and_read() -> vfat_rs::Result<()> {
     let (mut vfat, _f) = init_vfat()?;
     let mut root = vfat.get_root()?;
 
-    // 2. assert file does not exists
+    // 2. assert file does not exist
     vfat.path_exists(file_path.as_str().into())
         .expect("File already exists. Please delete it.");
 
@@ -397,13 +412,13 @@ fn test_big_write_and_read() -> vfat_rs::Result<()> {
         .expect("Cannote create file");
 
     // 4. Write CONTENT to file
-    const CONTENT: &[u8] = b"Hello, world! This is Vfat\n";
+    const CONTENT: &[u8] = b"Hello, world! This is Vfat file system. I'm doing some amount of writes, but they better be with longer buffers.\n";
     for _ in 0..ITERATIONS {
         as_file.write_all(CONTENT).expect("write all");
     }
 
     let mut as_file = vfat
-        .get_path(file_path.as_str().into())
+        .get_from_absolute_path(file_path.as_str().into())
         .unwrap()
         .into_file()
         .unwrap();
@@ -424,14 +439,14 @@ fn test_big_write_and_read() -> vfat_rs::Result<()> {
     }
 
     root.delete(file_name).expect("delete file");
-    // 6. assert file does not exists
-    let _file = vfat.get_path(file_path.as_str().into()).unwrap_err();
+    // 6. assert file does not exist
+    assert!(!vfat.path_exists(file_path.into())?);
     Ok(())
 }
 
 #[test]
 fn test_create_directory_long() -> vfat_rs::Result<()> {
-    test_create_directory("some-uncommonly-long-folder-name")
+    test_create_directory("some-uncommonly-long-folder-name-1234-1234-1234-1234-1234-1234-1234")
 }
 
 #[test]
@@ -444,26 +459,67 @@ fn test_create_directory(prefix: &str) -> vfat_rs::Result<()> {
     let (mut vfat, _f) = init_vfat()?;
     let mut root = vfat.get_root()?;
 
-    let err = format!("Directory '{}' already exists. Please delete it.", dir_path);
-
     // 2. assert file does not exists
-    let _file = vfat
-        .get_path(dir_path.as_str().into())
-        .expect_err(err.as_str());
+    assert!(!vfat.path_exists(dir_path.clone().into())?);
 
     // 3. create directory
     let mut res = root.create_directory(dir_name.clone())?;
 
-    let sub_dir = "prova";
+    assert!(vfat.path_exists(dir_path.clone().into())?);
+
+    // create subdirectory
+    let sub_dir = "test-subdir";
     res.create_directory(sub_dir.to_string())?;
+
     let full_path = format!("/{}/{}", dir_name, sub_dir);
-    vfat.get_path(PathBuf::from(full_path))?;
+    assert!(vfat.path_exists(full_path.clone().into())?);
 
     // Cleanup:
-    vfat.get_path(PathBuf::from(dir_path))?
-        .into_directory_unchecked()
-        .delete(sub_dir.to_string())?;
+    res.delete(sub_dir.to_string())?;
+    assert!(!vfat.path_exists(full_path.into())?);
+
     vfat.get_root()?.delete(dir_name.to_string())?;
+    assert!(!vfat.path_exists(dir_path.into())?);
+
+    Ok(())
+}
+
+#[test]
+fn test_file_rename() -> vfat_rs::Result<()> {
+    test_rename(false)
+}
+#[test]
+fn test_rename_dir() -> vfat_rs::Result<()> {
+    test_rename(true)
+}
+
+fn test_rename(is_dir: bool) -> vfat_rs::Result<()> {
+    let file_name = "hello_world";
+    let used_name_path = "/hello_world";
+
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    // 2. assert file does not exist
+    assert!(
+        !vfat.path_exists(used_name_path.into())?,
+        "File already exists"
+    );
+
+    if is_dir {
+        root.create_directory(file_name.into())?;
+    } else {
+        root.create_file(file_name.into())?;
+    }
+    assert!(vfat.path_exists(used_name_path.into())?);
+
+    let new_name = random_name("file_rename");
+
+    root.rename(file_name.into(), new_name.0.clone())?;
+
+    assert!(vfat.path_exists(new_name.1.into())?);
+    assert!(!vfat.path_exists(used_name_path.into())?);
+
     Ok(())
 }
 
@@ -488,7 +544,7 @@ fn test_delete_folder_non_empty() -> vfat_rs::Result<()> {
 #[ignore]
 #[test]
 fn test_disk_full() -> vfat_rs::Result<()> {
-    // before runnning this, update setup.sh to create a smaller vfat fs (say 5 mb).
+    // before running this, update setup.sh to create a smaller vfat fs (say 5 mb).
     println!("Starting stress test");
     let (mut vfat, _f) = init_vfat()?;
     let mut root = vfat.get_root()?;
@@ -511,7 +567,7 @@ fn test_disk_full() -> vfat_rs::Result<()> {
             as_file.write_all(CONTENT).expect("write all");
         }
         let as_file = vfat
-            .get_path(file_path.as_str().into())
+            .get_from_absolute_path(file_path.as_str().into())
             .unwrap()
             .into_file()
             .unwrap();

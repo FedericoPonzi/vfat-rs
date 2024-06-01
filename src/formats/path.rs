@@ -17,6 +17,9 @@ impl PathBuf {
     pub fn display(&self) -> &str {
         self.to_str()
     }
+    pub fn is_absolute(&self) -> bool {
+        self.0.starts_with('/')
+    }
 }
 impl core::fmt::Display for PathBuf {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

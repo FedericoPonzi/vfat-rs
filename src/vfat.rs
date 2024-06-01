@@ -4,12 +4,14 @@ use core::{fmt, mem};
 use binrw::io::Cursor;
 use binrw::BinReaderExt;
 use log::{debug, info, trace};
+use snafu::ensure;
 
+use crate::alloc::string::ToString;
 use crate::cluster::{cluster_reader, cluster_writer};
 use crate::fat_table::FatEntry;
 use crate::fat_table::FAT_ENTRY_SIZE;
 use crate::formats::extended_bios_parameter_block::FullExtendedBIOSParameterBlock;
-use crate::Result;
+use crate::{error, Result};
 use crate::{
     fat_table, ArcMutex, Attributes, BlockDevice, CachedPartition, ClusterId, Directory, Metadata,
     RegularDirectoryEntry, SectorId, UnknownDirectoryEntry, VfatDirectoryEntry, VfatEntry,
@@ -233,43 +235,38 @@ impl VfatFS {
 
     /// p should start with `/`.
     /// Test with a path to a file, test with a path to root.
-    pub fn get_path(&mut self, path: PathBuf) -> Result<VfatEntry> {
-        info!("FS: requested path: {:?}", path);
-        if path == PathBuf::from("/") {
+    pub fn get_from_absolute_path(&mut self, absolute_path: PathBuf) -> Result<VfatEntry> {
+        ensure!(
+            absolute_path.is_absolute(),
+            error::PathNotAbsoluteSnafu {
+                target: absolute_path.display().to_string()
+            }
+        );
+        if absolute_path == PathBuf::from("/") {
             return self.get_root().map(From::from);
         }
-        let mut path_iter = path.iter();
+        let mut path_iter = absolute_path.iter();
         let mut current_entry = VfatEntry::from(self.get_root()?);
         path_iter.next();
         for sub_path in path_iter {
-            info!("Visiting path: {:?}", sub_path);
             let directory = current_entry.into_directory_or_not_found()?;
             let directory_iter = directory.iter()?;
             let matches: Option<VfatEntry> = directory_iter
-                .filter(|entry| {
-                    info!(
-                        "Entry name: {:?}, looking for sub_path: {:?}",
-                        entry.metadata().name(),
-                        sub_path
-                    );
-                    entry.metadata().name() == sub_path
-                })
+                .filter(|entry| entry.metadata().name() == sub_path)
                 .last();
-            current_entry = matches.ok_or_else(|| {
-                info!("Matches for {:?} is empty: path not found!", sub_path);
-                VfatRsError::EntryNotFound {
-                    #[cfg(feature = "std")]
-                    target: sub_path.to_str().unwrap().into(),
-                    #[cfg(not(feature = "std"))]
-                    target: sub_path.into(),
-                }
+            current_entry = matches.ok_or_else(|| VfatRsError::EntryNotFound {
+                #[cfg(feature = "std")]
+                target: sub_path.to_str().unwrap().into(),
+                #[cfg(not(feature = "std"))]
+                target: sub_path.into(),
             })?;
         }
+        debug!("current entry: {:?}", current_entry);
         Ok(current_entry)
     }
 
     pub fn path_exists(&mut self, path: PathBuf) -> Result<bool> {
-        let entry = self.get_path(path).map(|_| true);
+        let entry = self.get_from_absolute_path(path).map(|_| true);
         match entry {
             Err(VfatRsError::EntryNotFound { .. }) => Ok(false),
             x => x,

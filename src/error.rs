@@ -32,6 +32,8 @@ pub enum VfatRsError {
     EntryNotFound { target: String },
     #[snafu(display("Cannot delete pseudo directory: '{}'", target))]
     CannotDeletePseudoDir { target: String },
+    #[snafu(display("Path '{}' is not absolute.", target))]
+    PathNotAbsolute { target: String },
 }
 
 impl From<IoError> for VfatRsError {

@@ -57,7 +57,7 @@ impl File {
     fn update_metadata(&mut self) -> Result<()> {
         debug!("Going to update metadata on disk...");
         self.vfat_filesystem
-            .get_path(self.metadata.parent().clone())?
+            .get_from_absolute_path(self.metadata.parent().clone())?
             .into_directory_unchecked()
             .update_entry(self.metadata.clone())
     }

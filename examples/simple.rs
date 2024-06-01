@@ -48,8 +48,17 @@ fn main() {
     file.read(&mut buf).unwrap();
     println!("The file contains: '{}'", String::from_utf8_lossy(&buf));
 
+    root.rename("my-file".to_string(), "my-file-renamed".to_string())
+        .unwrap();
+
+    println!(
+        "The file was renamed. old file exists? {} new file exists? {}",
+        root.contains("my-file").unwrap(),
+        root.contains("my-file-renamed").unwrap(),
+    );
+    print_contents(root.contents());
     println!("Deleting now...");
-    root.delete("my-file".to_string()).unwrap();
+    root.delete("my-file-renamed".to_string()).unwrap();
     println!("File was deleted!");
 
     print_contents(root.contents());

@@ -1,10 +1,7 @@
-use rand::{random, Rng};
-use std::fs::File;
-use std::path::{Path, PathBuf};
+use rand::Rng;
+use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
-use std::{fs, io};
-
-const FS_PATH: &str = "/tmp/irisos_fat32/fat32.fs";
 
 pub fn create_random_dir() -> PathBuf {
     let random_dir_name: String = rand::thread_rng()

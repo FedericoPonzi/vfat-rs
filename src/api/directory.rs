@@ -6,9 +6,10 @@ use core::mem;
 use log::{debug, error, info};
 use snafu::ensure;
 
+use crate::api::directory_entry::EntryId::Deleted;
 use crate::api::directory_entry::{
-    unknown_entry_convert_to_bytes_2, Attributes, EntryId, RegularDirectoryEntry,
-    UnknownDirectoryEntry, VfatDirectoryEntry,
+    unknown_entry_convert_to_bytes_2, Attributes, EntryId, LongFileNameEntry,
+    RegularDirectoryEntry, UnknownDirectoryEntry, VfatDirectoryEntry,
 };
 use crate::api::{File, Metadata, VfatEntry};
 use crate::cluster::cluster_reader::ClusterChainReader;
@@ -148,6 +149,8 @@ impl Directory {
     /// Returns:
     ///  usize = index of the first EndOfEntries
     ///  bool = enough spots found, no allocation needed.
+    /// TODO: revert commit ddf3fb48a03abff9e8096db72b571efab8307263 or add suppport for reusing deleted entries.
+    /// that commit partially implemented this behavior.
     fn find_first_empty_spot_offset(&self) -> error::Result<usize> {
         let mut cluster_chain_reader = self.cluster_chain_reader();
         let mut buff = [0u8; BUF_SIZE];
@@ -208,7 +211,7 @@ impl Directory {
     }
 
     /// Returns an entry from inside this directory.
-    fn get_entry(&mut self, target_filename: String) -> error::Result<VfatEntry> {
+    fn get_entry(&mut self, target_filename: &str) -> error::Result<VfatEntry> {
         self.contents()?
             .into_iter()
             .find(|name| {
@@ -219,15 +222,13 @@ impl Directory {
                 );
                 name.metadata.name() == target_filename
             })
-            .ok_or(error::VfatRsError::FileNotFound {
-                target: target_filename,
+            .ok_or_else(|| error::VfatRsError::FileNotFound {
+                target: target_filename.to_string(),
             })
     }
 
-    //TODO: test pseudo dir deletion.
     pub fn delete(&mut self, target_name: String) -> error::Result<()> {
         info!("Starting delete routine for entry: '{}'. ", target_name);
-        info!("Directory contents: {:?}", self.contents()?);
 
         const PSEUDO_CURRENT_FOLDER: &str = ".";
         const PSEUDO_PARENT_FOLDER: &str = "..";
@@ -240,10 +241,91 @@ impl Directory {
             }
         );
 
-        let target_entry = self.get_entry(target_name)?;
+        let mut target_entry = self.get_entry(&target_name)?;
 
+        if target_entry.is_dir() {
+            let directory = target_entry.into_directory_unchecked();
+            let contents = directory.contents()?;
+            if contents.len() > PSEUDO_FOLDERS.len() {
+                return Err(error::VfatRsError::NonEmptyDirectory {
+                    target: directory.metadata.name().to_string(),
+                    contents: contents
+                        .into_iter()
+                        .map(|entry| entry.name().to_string())
+                        .filter(|entry_name| !PSEUDO_FOLDERS.contains(&entry_name.as_str()))
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                });
+            }
+            target_entry = directory.into();
+        }
         info!("Found target entry: {:?}", target_entry);
-        self.delete_entry(target_entry)
+
+        self.delete_cluster_chain(&target_entry)?;
+        self.delete_entry(target_name)?;
+        Ok(())
+    }
+    fn delete_entry(&mut self, target_name: String) -> error::Result<()> {
+        // to delete the directory entry
+        // recreate the entry with lfn, and set deleted id.
+        info!("Running delete entry");
+        let mut lfn_name_buff: Vec<(u8, String)> = Vec::new();
+        let mut lfn_entries_buff: Vec<LongFileNameEntry> = Vec::new();
+
+        let entries = self.contents_direntry()?;
+
+        for (index, dir_entry) in entries.into_iter().enumerate() {
+            match dir_entry {
+                VfatDirectoryEntry::LongFileName(lfn) => {
+                    lfn_name_buff.push((lfn.sequence_number.get_position(), lfn.collect_name()));
+                    lfn_entries_buff.push(lfn);
+                }
+                VfatDirectoryEntry::Deleted(_) => {
+                    lfn_entries_buff.clear();
+                    lfn_name_buff.clear();
+                }
+                VfatDirectoryEntry::Regular(regular) => {
+                    let name = if !lfn_name_buff.is_empty() {
+                        // sort lfn_name_buff by first element of the tuple
+                        lfn_name_buff.sort();
+                        let file_name = Self::string_from_lfn(lfn_name_buff);
+                        // prepare the buffer for the next file.
+                        file_name
+                    } else {
+                        regular.full_name()
+                    };
+                    if name == target_name {
+                        for entry in lfn_entries_buff.into_iter().rev().enumerate() {
+                            let mut unknown: UnknownDirectoryEntry = entry.1.into();
+                            unknown.set_id(Deleted);
+                            self.update_entry_by_index(unknown, index - entry.0 - 1)?;
+                        }
+                        let mut unknown: UnknownDirectoryEntry = regular.into();
+                        unknown.set_id(Deleted);
+                        self.update_entry_by_index(unknown, index)?;
+                        return Ok(());
+                    }
+                    lfn_name_buff = Vec::new();
+                    lfn_entries_buff = Vec::new();
+                }
+                // The for loop stops on EndOfEntries
+                VfatDirectoryEntry::EndOfEntries(_) => {
+                    panic!("This cannot happen! Found EndOfEntries")
+                }
+            };
+        }
+        error!("Directory update entry {}: file not found!!", target_name);
+        Err(error::VfatRsError::FileNotFound {
+            target: target_name,
+        })
+    }
+    fn delete_cluster_chain(&mut self, entry: &VfatEntry) -> error::Result<()> {
+        info!(
+            "Deleting entry's associated clusters starting at {:?}",
+            entry.metadata.cluster
+        );
+        self.vfat_filesystem
+            .delete_fat_cluster_chain(entry.metadata.cluster)
     }
 
     fn contents_direntry(&self) -> error::Result<Vec<VfatDirectoryEntry>> {
@@ -362,7 +444,67 @@ impl Directory {
             .join("")
     }
 
+    pub fn rename(&mut self, target_name: String, new_name: String) -> error::Result<()> {
+        // TODO: ensure new_name doesn't exists. This is tricky because of TOCTOU
+        // it should acquire a lock on the fs. check and create.
+        // TODO: try to test file deletion and read after the delete. It looks like it works though it shouldn't.
+
+        let target_entry = self.get_entry(&target_name)?;
+
+        let mut metadata = target_entry.metadata;
+        self.inner_rename(target_name, new_name, &mut metadata)
+    }
+    fn inner_rename(
+        &mut self,
+        target_name: String,
+        new_name: String,
+        metadata: &mut Metadata,
+    ) -> error::Result<()> {
+        // create lfn from existing file
+        // delete old file
+        let attributes = metadata.attributes;
+        let entries: Vec<UnknownDirectoryEntry> =
+            VfatDirectoryEntry::new_vfat_entry(new_name.as_str(), metadata.cluster, attributes);
+        let entries_len = entries.len();
+        let first_empty_spot_offset = if self.last_entry_spot.is_none() {
+            self.find_first_empty_spot_offset()?
+        } else {
+            self.last_entry_spot.unwrap()
+        };
+
+        info!(
+            "Going to use as metadata: {:?}. self metadatapath= '{}', selfmetadata name = '{}'. My attributes: {:?}, cluster: {:?}",
+            metadata,
+            self.metadata.full_path().display(),
+            self.metadata.name(),
+            self.metadata.attributes,
+            self.metadata.cluster
+        );
+        info!(
+            "Found spot: {:?}, Going to append entries: {:?}",
+            first_empty_spot_offset, entries
+        );
+
+        let mut ccw = self
+            .vfat_filesystem
+            .cluster_chain_writer(self.metadata.cluster);
+        ccw.seek(first_empty_spot_offset)?;
+
+        for unknown_entry in entries.into_iter() {
+            let entry: [u8; mem::size_of::<UnknownDirectoryEntry>()] = unknown_entry.into();
+            ccw.write(&entry)?;
+        }
+        metadata.name = new_name;
+
+        // finally, update entries:
+        self.last_entry_spot =
+            Some(first_empty_spot_offset + entries_len * mem::size_of::<UnknownDirectoryEntry>());
+        self.delete_entry(target_name)?;
+        Ok(())
+    }
+
     // TODO: Currently this doesn't support renaming file, just updating/replacing metadatas...
+    // TODO: lfn_name_buff should be sorted by position.
     fn update_entry_inner(
         &mut self,
         target_name: String,
@@ -381,6 +523,7 @@ impl Directory {
                 VfatDirectoryEntry::Deleted(_) => lfn_buff.clear(),
                 VfatDirectoryEntry::Regular(regular) => {
                     let name = if !lfn_buff.is_empty() {
+                        lfn_buff.sort();
                         let file_name = Self::string_from_lfn(lfn_buff);
                         // prepare the buffer for the next file.
                         lfn_buff = Vec::new();
@@ -421,38 +564,6 @@ impl Directory {
         ccw.seek(index_offset)?;
         ccw.write(&buf)?;
         Ok(())
-    }
-
-    fn delete_entry(&mut self, entry: VfatEntry) -> error::Result<()> {
-        info!("Running delete entry");
-        const SPECIAL_CURRENT_UPPER_DIRECTORY: usize = 2;
-        let entry = if entry.is_dir() {
-            let directory = entry.into_directory_unchecked();
-            if directory.contents()?.len() > SPECIAL_CURRENT_UPPER_DIRECTORY {
-                return Err(error::VfatRsError::NonEmptyDirectory {
-                    target: directory.metadata.name().to_string(),
-                });
-            }
-            info!("Target entry is a directory with no contents. It's safe to delete.");
-            directory.into()
-        } else {
-            entry
-        };
-
-        info!(
-            "Deleting entry's associated clusters starting at {:?}",
-            entry.metadata.cluster
-        );
-        self.vfat_filesystem
-            .delete_fat_cluster_chain(entry.metadata.cluster)?;
-        let target_name = entry.metadata().name().to_string();
-        // Directory Entry change to DeleteEntry
-        // 2. Set VfatDirectoryEntry to Deleted.
-        let dir_entry: RegularDirectoryEntry = entry.metadata.into();
-        let mut dir_entry: UnknownDirectoryEntry = dir_entry.into();
-
-        dir_entry.set_id(EntryId::Deleted);
-        self.update_entry_inner(target_name, dir_entry)
     }
 
     fn attributes_from_entry(entry: &EntryType) -> Attributes {

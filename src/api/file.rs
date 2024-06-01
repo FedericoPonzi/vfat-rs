@@ -141,6 +141,7 @@ impl File {
         Ok(self.offset as u64)
     }
     pub fn read(&mut self, mut buf: &mut [u8]) -> Result<usize> {
+        // TODO: if cluster is deleted, it should fail.
         // it should read at most the buf size or the missing file data.
         let amount_to_read = cmp::min(buf.len(), self.metadata.size().saturating_sub(self.offset));
         if amount_to_read == 0

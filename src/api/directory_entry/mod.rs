@@ -10,7 +10,7 @@ use log::{debug, info};
 use regex::Regex;
 
 pub use crate::api::directory_entry::formats::{attribute, Attributes, EntryId};
-use crate::api::directory_entry::long_file_name_entry::{LongFileNameEntry, SequenceNumber};
+pub use crate::api::directory_entry::long_file_name_entry::{LongFileNameEntry, SequenceNumber};
 pub use crate::api::directory_entry::regular_entry::RegularDirectoryEntry;
 pub use crate::api::directory_entry::unknown_entry::*;
 use crate::api::timestamp::VfatTimestamp;

@@ -4,7 +4,6 @@ use vfat_rs::io::{SeekFrom, Write};
 
 use log::info;
 use rand::Rng;
-use serial_test::serial;
 
 use crate::common::VfatFsRandomPath;
 use block_devs::FilebackedBlockDevice;
@@ -20,7 +19,7 @@ mod common;
    would end up to just have them running in serial, I preferred to just go ahead and use `serial_test` crate.
 */
 fn init() -> (FilebackedBlockDevice, MasterBootRecord, VfatFsRandomPath) {
-    // If this is set to debug, for stress tests this produces a lot of logs that can cause OOM kill.
+    // If this is set to debug for stress tests, this produces a lot of logs that can cause OOM kill.
     std::env::set_var("RUST_LOG", "debug");
     std::env::set_var("RUST_BACKTRACE", "1");
     let _ = env_logger::builder().is_test(true).try_init();
@@ -58,7 +57,7 @@ fn random_name(prefix: &str) -> (String, String) {
 
 #[test]
 fn test_read_bios_parameter_block() {
-    let (mut dev, master_boot_record, vfatfs_randompath) = init();
+    let (mut dev, master_boot_record, _vfatfs_randompath) = init();
 
     assert_eq!(
         master_boot_record.valid_bootsector_sign,
@@ -494,7 +493,7 @@ fn test_disk_full() -> vfat_rs::Result<()> {
     let (mut vfat, _f) = init_vfat()?;
     let mut root = vfat.get_root()?;
     println!("Starting stress test");
-    for i in 0..1000 {
+    for _ in 0..1000 {
         let (file_name, file_path) = random_name("stress_test");
         println!("Creating file: {}", file_name.as_str());
         // 2. assert file does not exists
@@ -508,10 +507,10 @@ fn test_disk_full() -> vfat_rs::Result<()> {
 
         // 4. Write CONTENT to file
         const CONTENT: &[u8] = b"Hello, world! This is Vfat\n";
-        for i in 0..10000 {
+        for _ in 0..10000 {
             as_file.write_all(CONTENT).expect("write all");
         }
-        let mut as_file = vfat
+        let as_file = vfat
             .get_path(file_path.as_str().into())
             .unwrap()
             .into_file()

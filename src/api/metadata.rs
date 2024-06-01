@@ -10,7 +10,7 @@ pub struct Metadata {
     creation: VfatTimestamp,
     last_update: VfatTimestamp,
     //last_access: VfatTimestamp,
-    name: String,
+    pub(crate) name: String,
     /// Size of this file in bytes. For directories, it should be the sum of the sizes
     /// occupied by the metadatas of the contained files.
     pub(crate) size: u32,

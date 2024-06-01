@@ -20,8 +20,12 @@ pub enum VfatRsError {
     IoError { source: IoError },
     #[snafu(display("Unsupported vfat partition found, signature: {}", target))]
     InvalidVfat { target: u8 },
-    #[snafu(display("Impossible delete non empty directory: {}", target))]
-    NonEmptyDirectory { target: String },
+    #[snafu(display(
+        "Impossible delete non empty directory: {}. Contains: [{}]",
+        target,
+        contents
+    ))]
+    NonEmptyDirectory { target: String, contents: String },
     #[snafu(display("File not found: '{}'", target))]
     FileNotFound { target: String },
     #[snafu(display("Entry not found: '{}'", target))]

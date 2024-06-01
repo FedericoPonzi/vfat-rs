@@ -2,19 +2,16 @@
 
 A simple VFAT implementation written in rust, and mostly tested against Linux's vfat driver.
 
-It aims to be straightforward to understand and easy to use in a custom kernel. Currently, supports:
+It aims to be straightforward to understand and easy to use in a custom kernel.
+
+It supports all the basic operations:
 
 * File and directory creation,
 * File reading and writing,
-* Partial directory and file deletion. Deletion updates the entry's metadata to mark it as deleted, but it's never
-  garbage collected
-* Partial renaming support.
+* Directory and file deletion.
 
-Needs:
-
-* Better deletion support.
-* Better renaming support. When you rename an object, the metadata size can grow or shrink.
-* Flushing and actual usage of the cache.
+It needs a better support for deletion. Deletion updates the entry's metadata in the directory and mark it as deleted,
+but it's never garbage collected (this would be done by a defrag tool) nor reused.
 
 ## no_std
 
@@ -38,7 +35,7 @@ To run the example, first create a vfat fs using the script `tests/setup.sh`. Th
 It needs sudo access for mount and unmount. Then you're ready to run the example file using:
 
 ```bash
-cargo run --example simple --feature std
+cargo run --example simple --features std
 ```
 
 ## Testing

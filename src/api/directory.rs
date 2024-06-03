@@ -11,10 +11,10 @@ use crate::api::raw_directory_entry::{
     unknown_entry_convert_to_bytes_2, Attributes, LongFileNameEntry, RegularDirectoryEntry,
     UnknownDirectoryEntry, VfatDirectoryEntry,
 };
-use crate::api::{DirectoryEntry, File, Metadata};
+use crate::api::{DirectoryEntry, File, Metadata, VfatMetadataTrait};
 use crate::cluster::cluster_reader::ClusterChainReader;
 use crate::{error, PathBuf};
-use crate::{ClusterId, VfatFS, VfatMetadataTrait};
+use crate::{ClusterId, VfatFS};
 
 // TODO: this assumes sector size
 const SECTOR_SIZE: usize = 512;
@@ -34,11 +34,9 @@ pub enum EntryType {
     // Link
 }
 
-/// This is the public interface to the directory concept.
 /// A directory is composed of "DirectoryEntry" elements.
-/// The directory supports Long File Name (LFN)
-/// Externally, DirectoryEntry are converted to directory or files. Deleted elements are hidden.
-/// Every directory has two pseudo directories: "." (current directory) and ".." (parent directory)
+/// Every directory has at least two pseudo directories: "." (current directory) and ".." (parent directory)
+///
 #[derive(Debug)]
 pub struct Directory {
     pub(crate) vfat_filesystem: VfatFS,
@@ -570,6 +568,12 @@ impl Directory {
             EntryType::Directory => Attributes::new_directory(),
             EntryType::File => Attributes(0),
         }
+    }
+}
+
+impl VfatMetadataTrait for Directory {
+    fn metadata(&self) -> &Metadata {
+        &self.metadata
     }
 }
 

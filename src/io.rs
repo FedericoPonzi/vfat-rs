@@ -1,6 +1,4 @@
-// Io traits
-// io::Error
-// Chronos / timestamp
+//! I/O traits. With std it uses the std io modules structs, otherwise uses the custom implementation which is copied from rust std to ease compatibility.
 
 pub type Result<T> = core::result::Result<T, Error>;
 #[cfg(not(feature = "std"))]

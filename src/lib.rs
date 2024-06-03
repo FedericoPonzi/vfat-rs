@@ -1,4 +1,6 @@
-//! ntfs-rs is a simple ntfs implementation in Rust.
+//! vfat-rs is a simple vfat (fat32) implementation in Rust.
+//! Use it in your custom kernel or integrate it in your user level application.
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 //#![deny(missing_docs)]
 //#![deny(unsafe_code)]
@@ -18,9 +20,6 @@ use api::raw_directory_entry::{
 pub use api::EntryType;
 pub use api::{Directory, DirectoryEntry, Metadata, VfatMetadataTrait};
 pub(crate) use cache::CachedPartition;
-pub use device::BlockDevice;
-#[cfg(feature = "std")]
-pub use device::FilebackedBlockDevice;
 pub use error::{Result, VfatRsError};
 pub(crate) use formats::cluster_id::ClusterId;
 #[cfg(not(feature = "std"))]
@@ -34,15 +33,17 @@ pub use vfat::VfatFS;
 mod api;
 mod cache;
 mod cluster;
-mod device;
-/// NtfsRs error definitions
+/// VfatRs error definitions
 mod error;
 mod fat_table;
+#[cfg(feature = "std")]
+mod fileblockdevice;
 mod formats;
 pub mod io;
 mod macros;
-/// A simple Master Booot Record implementation
 pub mod mbr;
+mod time;
+pub mod traits;
 mod vfat;
 
 const EBPF_VFAT_MAGIC: u8 = 0x28;
@@ -52,56 +53,11 @@ const EBPF_VFAT_MAGIC_ALT: u8 = 0x29;
 /// Vfat needs to be cloned, and potentially we could send references across threads.
 type ArcMutex<CachedPartition> = Arc<CachedPartition>;
 
-pub use traits::{TimeManagerNoop, TimeManagerTrait};
-pub mod traits {
-    use crate::api::timestamp::VfatTimestamp;
-    use alloc::sync::Arc;
-    use core::fmt::Debug;
+#[cfg(feature = "std")]
+pub use time::TimeManagerChronos;
+pub use time::TimeManagerNoop;
 
-    // An interface to the OS-owned timer. Needed for timestamping file creations and update.
-    pub trait TimeManagerTrait: Debug {
-        /// Get the current Unix timestamp in milliseconds.
-        /// The number of seconds since January 1, 1970, 00:00:00 UTC
-        /// TODO negative dates? Should this be i64?
-        fn get_current_timestamp(&self) -> u64;
-        fn get_current_vfat_timestamp(&self) -> VfatTimestamp {
-            VfatTimestamp::from(self.get_current_timestamp())
-        }
-    }
+#[cfg(feature = "std")]
+pub use fileblockdevice::FilebackedBlockDevice;
 
-    #[derive(Clone, Debug, Default)]
-    pub struct TimeManagerNoop {}
-    impl TimeManagerNoop {
-        pub fn new() -> Self {
-            Default::default()
-        }
-        pub fn new_arc() -> Arc<Self> {
-            Arc::new(Self {})
-        }
-    }
-    impl TimeManagerTrait for TimeManagerNoop {
-        fn get_current_timestamp(&self) -> u64 {
-            0
-        }
-    }
-
-    #[cfg(feature = "std")]
-    #[derive(Clone, Debug)]
-    pub struct TimeManagerChronos {}
-    #[cfg(feature = "std")]
-    impl TimeManagerChronos {
-        pub(crate) fn new() -> Self {
-            Self {}
-        }
-    }
-    #[cfg(feature = "std")]
-    impl TimeManagerTrait for TimeManagerChronos {
-        fn get_current_timestamp(&self) -> u64 {
-            use chrono::Utc;
-            let now = Utc::now();
-            let seconds_since_epoch: i64 = now.timestamp();
-            // I guess it's an i64 because of underflow for dates before 1970
-            seconds_since_epoch as u64
-        }
-    }
-}
+pub use traits::{BlockDevice, TimeManagerTrait};

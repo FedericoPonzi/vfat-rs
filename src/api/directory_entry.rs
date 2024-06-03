@@ -17,23 +17,13 @@ pub trait VfatMetadataTrait {
         self.metadata().creation().unwrap()
     }
 }
-
-impl VfatMetadataTrait for File {
-    fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-}
-impl VfatMetadataTrait for Directory {
-    fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-}
 impl VfatMetadataTrait for DirectoryEntry {
     fn metadata(&self) -> &Metadata {
         &self.metadata
     }
 }
 
+/// A directory entry: either a file or a directory.
 #[derive(Debug)]
 pub struct DirectoryEntry {
     kind: EntryKind,
@@ -58,10 +48,6 @@ impl DirectoryEntry {
 }
 
 impl DirectoryEntry {
-    pub(crate) fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-
     pub(crate) fn is_dir(&self) -> bool {
         matches!(&self.kind, EntryKind::Directory)
     }

@@ -11,7 +11,7 @@ use crate::cluster::{cluster_reader, cluster_writer};
 use crate::fat_table::FatEntry;
 use crate::fat_table::FAT_ENTRY_SIZE;
 use crate::formats::extended_bios_parameter_block::FullExtendedBIOSParameterBlock;
-use crate::{error, Result};
+use crate::{error, Result, VfatMetadataTrait};
 use crate::{
     fat_table, ArcMutex, Attributes, BlockDevice, CachedPartition, ClusterId, Directory,
     DirectoryEntry, Metadata, RegularDirectoryEntry, SectorId, UnknownDirectoryEntry,
@@ -19,6 +19,9 @@ use crate::{
 };
 use crate::{PathBuf, TimeManagerTrait};
 
+/// Main entry point for your VFAT filesystem.
+///
+/// Every file and directory object will keep a copy of this struct.
 #[derive(Clone)]
 pub struct VfatFS {
     // we need arc around device, because _maybe_ something might need to `Send` this device or Vfat
@@ -44,22 +47,24 @@ impl fmt::Debug for VfatFS {
 
 impl VfatFS {
     #[cfg(not(feature = "std"))]
+    /// Create a new VFat filesystem using TimeManagerNoop.
     pub fn new<B: BlockDevice + 'static>(
         device: B,
         // time_manager: T,
         partition_start_sector: u32,
     ) -> Result<Self> {
-        let no_op = crate::traits::TimeManagerNoop::new();
+        let no_op = crate::time::TimeManagerNoop::new();
         Self::new_tm(device, partition_start_sector, no_op)
     }
 
     #[cfg(feature = "std")]
-    // chronos will be used as a time manager.
+    /// Create a new VFat filesystem using Chronos a time manager.
     pub fn new<B: BlockDevice + 'static>(device: B, partition_start_sector: u32) -> Result<Self> {
-        let chronos_tm = crate::traits::TimeManagerChronos::new();
+        let chronos_tm = crate::time::TimeManagerChronos::new();
         Self::new_tm(device, partition_start_sector, chronos_tm)
     }
 
+    /// Create a new VFat filesystem using a custom time manager.
     pub fn new_tm<B: BlockDevice + 'static>(
         mut device: B,
         partition_start_sector: u32,
@@ -70,6 +75,7 @@ impl VfatFS {
         Self::new_with_ebpb(device, partition_start_sector, full_ebpb, time_manager)
     }
 
+    /// Read the Full Extended BIOS Parameter block from the device.
     pub fn read_fullebpb<B: BlockDevice + 'static>(
         device: &mut B,
         start_sector: u32,
@@ -233,8 +239,10 @@ impl VfatFS {
         fat_table::delete_cluster_chain(cluster_id, self.device.clone())
     }
 
-    /// p should start with `/`.
-    /// Test with a path to a file, test with a path to root.
+    /// Get a new DirectoryEntry from an absolute path.
+    ///
+    /// ## Safety:
+    /// absolute_path should start with `/`.
     pub fn get_from_absolute_path(&mut self, absolute_path: PathBuf) -> Result<DirectoryEntry> {
         ensure!(
             absolute_path.is_absolute(),

@@ -4,9 +4,9 @@ use alloc::sync::Arc;
 use log::info;
 use spin::mutex::SpinMutex;
 
-use crate::device::BlockDevice;
 use crate::error::Result;
 use crate::formats::cluster_id::ClusterId;
+use crate::traits::BlockDevice;
 use crate::SectorId;
 
 /// An interface to the underlaying Block Device.

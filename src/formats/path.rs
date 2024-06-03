@@ -1,6 +1,8 @@
 use alloc::string::String;
 use core::iter;
 
+/// A simple implementation of PathBuf. Vfat uses utf8/utf16 for encoding: https://wiki.gentoo.org/wiki/FAT/en#UTF-8.2FUTF-16_character_hardware_bugs
+/// therefore it's ok to use a String as a baking data structure.
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct PathBuf(pub String);
 

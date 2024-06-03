@@ -1,3 +1,6 @@
+//! A simple Master Booot Record implementation.
+//!
+//! This can be used to read a MBR from a device. It's decoupled from vfat, so it could be used on its own.
 use crate::{const_assert_size, error, BlockDevice, SectorId};
 use binrw::io::Cursor;
 use binrw::BinRead;

@@ -5,7 +5,7 @@ use core::{cmp, fmt};
 use log::{debug, info};
 
 use crate::api::Metadata;
-use crate::{error, ClusterId, PathBuf, Result, VfatFS};
+use crate::{error, ClusterId, PathBuf, Result, VfatFS, VfatMetadataTrait};
 
 /// A File representation in a VfatFilesystem.
 //#[derive(Clone)]
@@ -182,5 +182,11 @@ impl Write for File {
 
     fn flush(&mut self) -> crate::io::Result<()> {
         Ok(self.flush()?)
+    }
+}
+
+impl VfatMetadataTrait for File {
+    fn metadata(&self) -> &Metadata {
+        &self.metadata
     }
 }

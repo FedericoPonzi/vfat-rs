@@ -56,7 +56,8 @@ rm -fv ${temp_dir}/fat32.fs.fat
 random_suffix="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 10)"
 dest="/tmp/irisos_vfat_testmount${random_suffix}/"
 mkdir -p $dest
-sudo mount -o loop,offset=$((2048*512)),uid=1000,gid=1000,dmask=0000,fmask=0001 fat32.fs $dest
+# sync option: every write is flushed right away.
+sudo mount -o sync,loop,offset=$((2048*512)),uid=1000,gid=1000,dmask=0000,fmask=0001 fat32.fs $dest
 
 # Create test files:
 cd ${dest}
@@ -88,7 +89,8 @@ echo 'Hello, Iris OS!' > ${dest}hello.txt
 # exit from the mounted fs:
 cd /tmp
 
-## Then unmount the fs, to flush disk writes.
+## Then unmount the fs
 sudo umount "$dest"
+
 rmdir "${dest}"
-echo "created fs: ${temp_dir}${diskimg}"
+echo "created fs: ${temp_dir}/${diskimg}"

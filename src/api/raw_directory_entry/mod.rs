@@ -9,10 +9,12 @@ use core::iter;
 use log::{debug, info};
 use regex::Regex;
 
-pub use crate::api::directory_entry::formats::{attribute, Attributes, EntryId};
-pub use crate::api::directory_entry::long_file_name_entry::{LongFileNameEntry, SequenceNumber};
-pub use crate::api::directory_entry::regular_entry::RegularDirectoryEntry;
-pub use crate::api::directory_entry::unknown_entry::*;
+pub use crate::api::raw_directory_entry::formats::{attribute, Attributes, EntryId};
+pub use crate::api::raw_directory_entry::long_file_name_entry::{
+    LongFileNameEntry, SequenceNumber,
+};
+pub use crate::api::raw_directory_entry::regular_entry::RegularDirectoryEntry;
+pub use crate::api::raw_directory_entry::unknown_entry::*;
 use crate::api::timestamp::VfatTimestamp;
 use crate::ClusterId;
 
@@ -33,7 +35,7 @@ const ID_DELETED_UNUSED_ENTRY: u8 = 0xE5;
 ///  * an EOE - last entry in the chain to signal the end of the directory contents.
 /// * a Deleted entry, which might be reused for new entries.
 #[derive(Clone, Debug)]
-pub enum VfatDirectoryEntry {
+pub(crate) enum VfatDirectoryEntry {
     Regular(RegularDirectoryEntry),
     LongFileName(LongFileNameEntry),
     EndOfEntries(UnknownDirectoryEntry),
@@ -323,8 +325,8 @@ impl VfatDirectoryEntry {
 mod test {
     extern crate std;
 
-    use crate::api::directory_entry::formats::Attributes;
-    use crate::api::directory_entry::{
+    use crate::api::raw_directory_entry::formats::Attributes;
+    use crate::api::raw_directory_entry::{
         LongFileNameEntry, RegularDirectoryEntry, VfatDirectoryEntry,
     };
     use crate::ClusterId;

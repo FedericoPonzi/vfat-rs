@@ -1,17 +1,17 @@
 use alloc::format;
 use alloc::string::{String, ToString};
-use alloc::vec::{IntoIter, Vec};
+use alloc::vec::Vec;
 use core::mem;
 
 use log::{debug, error, info};
 use snafu::ensure;
 
-use crate::api::directory_entry::EntryId::Deleted;
-use crate::api::directory_entry::{
+use crate::api::raw_directory_entry::EntryId::Deleted;
+use crate::api::raw_directory_entry::{
     unknown_entry_convert_to_bytes_2, Attributes, LongFileNameEntry, RegularDirectoryEntry,
     UnknownDirectoryEntry, VfatDirectoryEntry,
 };
-use crate::api::{File, Metadata, VfatEntry};
+use crate::api::{DirectoryEntry, File, Metadata};
 use crate::cluster::cluster_reader::ClusterChainReader;
 use crate::{error, PathBuf};
 use crate::{ClusterId, VfatFS, VfatMetadataTrait};
@@ -27,6 +27,7 @@ pub fn unknown_entry_convert_from_bytes_entries(
     unsafe { mem::transmute(entries) }
 }
 
+#[derive(Debug)]
 pub enum EntryType {
     File,
     Directory,
@@ -80,7 +81,13 @@ impl Directory {
     }
 
     /// Used to create a new entry in this directory
-    fn create(&mut self, name: String, entry_type: EntryType) -> error::Result<VfatEntry> {
+    fn create(&mut self, name: String, entry_type: EntryType) -> error::Result<DirectoryEntry> {
+        info!(
+            "Creating {:?} entry with name '{:?}' in directory '{:?}'",
+            entry_type,
+            name,
+            self.metadata.name()
+        );
         if self.contains(&name)? {
             return Err(error::VfatRsError::NameAlreadyInUse { target: name });
         }
@@ -137,9 +144,9 @@ impl Directory {
 
         Ok(match entry_type {
             EntryType::Directory => {
-                VfatEntry::new_directory(metadata, self.vfat_filesystem.clone())
+                DirectoryEntry::new_directory(metadata, self.vfat_filesystem.clone())
             }
-            EntryType::File => VfatEntry::new_file(metadata, self.vfat_filesystem.clone()),
+            EntryType::File => DirectoryEntry::new_file(metadata, self.vfat_filesystem.clone()),
         })
     }
 
@@ -187,7 +194,7 @@ impl Directory {
             // Allocate for directory
             EntryType::Directory => self.vfat_filesystem.allocate_cluster_new_entry()?,
         };
-        info!("Going to use as cluster id: {}", cluster_id);
+        debug!("Going to use as cluster id: {}", cluster_id);
         let size = 0;
         let metadata = Metadata::new(
             self.vfat_filesystem
@@ -206,12 +213,8 @@ impl Directory {
         Ok(metadata)
     }
 
-    pub(crate) fn iter(&self) -> error::Result<IntoIter<VfatEntry>> {
-        self.contents().map(|v| v.into_iter())
-    }
-
     /// Returns an entry from inside this directory.
-    fn get_entry(&mut self, target_filename: &str) -> error::Result<VfatEntry> {
+    fn get_entry(&mut self, target_filename: &str) -> error::Result<DirectoryEntry> {
         self.contents()?
             .into_iter()
             .find(|name| {
@@ -253,8 +256,10 @@ impl Directory {
                         .into_iter()
                         .map(|entry| entry.name().to_string())
                         .filter(|entry_name| !PSEUDO_FOLDERS.contains(&entry_name.as_str()))
-                        .collect::<Vec<String>>()
-                        .join(", "),
+                        .fold(String::new(), |mut acc, s| {
+                            acc.push_str(&s);
+                            acc
+                        }),
                 });
             }
             target_entry = directory.into();
@@ -265,9 +270,13 @@ impl Directory {
         self.delete_entry(target_name)?;
         Ok(())
     }
+
+    /// Safety: Assumes `target_name` exists in the current directory.
+    ///
     fn delete_entry(&mut self, target_name: String) -> error::Result<()> {
         // to delete the directory entry
         // recreate the entry with lfn, and set deleted id.
+
         info!("Running delete entry");
         let mut lfn_name_buff: Vec<(u8, String)> = Vec::new();
         let mut lfn_entries_buff: Vec<LongFileNameEntry> = Vec::new();
@@ -291,6 +300,7 @@ impl Directory {
                         regular.full_name()
                     };
                     if name == target_name {
+                        // set all the lfn entries as deleted.
                         for entry in lfn_entries_buff.into_iter().rev().enumerate() {
                             let mut unknown: UnknownDirectoryEntry = entry.1.into();
                             unknown.set_id(Deleted);
@@ -315,7 +325,7 @@ impl Directory {
             target: target_name,
         })
     }
-    fn delete_cluster_chain(&mut self, entry: &VfatEntry) -> error::Result<()> {
+    fn delete_cluster_chain(&mut self, entry: &DirectoryEntry) -> error::Result<()> {
         info!(
             "Deleting entry's associated clusters starting at {:?}",
             entry.metadata.cluster
@@ -346,7 +356,7 @@ impl Directory {
         Ok(entries)
     }
 
-    pub fn contents(&self) -> error::Result<Vec<VfatEntry>> {
+    pub fn contents(&self) -> error::Result<Vec<DirectoryEntry>> {
         info!("Directory contents, cluster: {:?}", self.metadata.cluster);
 
         let entries = self.contents_direntry()?;
@@ -391,9 +401,9 @@ impl Directory {
                     debug!("Metadata: {:?}", metadata);
 
                     let new_fn = if regular.is_dir() {
-                        VfatEntry::new_directory
+                        DirectoryEntry::new_directory
                     } else {
-                        VfatEntry::new_file
+                        DirectoryEntry::new_file
                     };
 
                     contents.push(new_fn(metadata, self.vfat_filesystem.clone()));
@@ -567,7 +577,7 @@ impl Directory {
 mod test {
     extern crate std;
 
-    use crate::api::directory_entry::EntryId;
+    use crate::api::raw_directory_entry::EntryId;
 
     #[test]
     fn valid_entry_id() {

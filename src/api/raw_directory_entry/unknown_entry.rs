@@ -1,5 +1,7 @@
-use crate::api::directory_entry::long_file_name_entry::LongFileNameEntry;
-use crate::api::directory_entry::{Attributes, EntryId, RegularDirectoryEntry, VfatDirectoryEntry};
+use crate::api::raw_directory_entry::long_file_name_entry::LongFileNameEntry;
+use crate::api::raw_directory_entry::{
+    Attributes, EntryId, RegularDirectoryEntry, VfatDirectoryEntry,
+};
 use crate::const_assert_size;
 use core::mem;
 

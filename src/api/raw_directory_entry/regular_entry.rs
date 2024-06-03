@@ -3,7 +3,7 @@ use alloc::string::String;
 use core::fmt;
 use core::fmt::{Debug, Formatter};
 
-use crate::api::directory_entry::{Attributes, VfatDirectoryEntry};
+use crate::api::raw_directory_entry::{Attributes, VfatDirectoryEntry};
 use crate::api::timestamp::{Milliseconds, VfatTimestamp};
 use crate::api::Metadata;
 use crate::{const_assert_size, ClusterId};

@@ -28,19 +28,19 @@ impl VfatMetadataTrait for Directory {
         &self.metadata
     }
 }
-impl VfatMetadataTrait for VfatEntry {
+impl VfatMetadataTrait for DirectoryEntry {
     fn metadata(&self) -> &Metadata {
         &self.metadata
     }
 }
 
 #[derive(Debug)]
-pub struct VfatEntry {
+pub struct DirectoryEntry {
     kind: EntryKind,
     pub metadata: Metadata,
     vfat_filesystem: VfatFS,
 }
-impl VfatEntry {
+impl DirectoryEntry {
     pub fn new_file(metadata: Metadata, vfat_filesystem: VfatFS) -> Self {
         Self {
             kind: EntryKind::File,
@@ -57,7 +57,7 @@ impl VfatEntry {
     }
 }
 
-impl VfatEntry {
+impl DirectoryEntry {
     pub(crate) fn metadata(&self) -> &Metadata {
         &self.metadata
     }
@@ -96,8 +96,8 @@ impl VfatEntry {
     }
 }
 
-impl From<Directory> for VfatEntry {
+impl From<Directory> for DirectoryEntry {
     fn from(directory: Directory) -> Self {
-        VfatEntry::new_directory(directory.metadata, directory.vfat_filesystem)
+        DirectoryEntry::new_directory(directory.metadata, directory.vfat_filesystem)
     }
 }

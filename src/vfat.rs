@@ -13,9 +13,9 @@ use crate::fat_table::FAT_ENTRY_SIZE;
 use crate::formats::extended_bios_parameter_block::FullExtendedBIOSParameterBlock;
 use crate::{error, Result};
 use crate::{
-    fat_table, ArcMutex, Attributes, BlockDevice, CachedPartition, ClusterId, Directory, Metadata,
-    RegularDirectoryEntry, SectorId, UnknownDirectoryEntry, VfatDirectoryEntry, VfatEntry,
-    VfatRsError, EBPF_VFAT_MAGIC, EBPF_VFAT_MAGIC_ALT,
+    fat_table, ArcMutex, Attributes, BlockDevice, CachedPartition, ClusterId, Directory,
+    DirectoryEntry, Metadata, RegularDirectoryEntry, SectorId, UnknownDirectoryEntry,
+    VfatDirectoryEntry, VfatRsError, EBPF_VFAT_MAGIC, EBPF_VFAT_MAGIC_ALT,
 };
 use crate::{PathBuf, TimeManagerTrait};
 
@@ -235,7 +235,7 @@ impl VfatFS {
 
     /// p should start with `/`.
     /// Test with a path to a file, test with a path to root.
-    pub fn get_from_absolute_path(&mut self, absolute_path: PathBuf) -> Result<VfatEntry> {
+    pub fn get_from_absolute_path(&mut self, absolute_path: PathBuf) -> Result<DirectoryEntry> {
         ensure!(
             absolute_path.is_absolute(),
             error::PathNotAbsoluteSnafu {
@@ -246,12 +246,13 @@ impl VfatFS {
             return self.get_root().map(From::from);
         }
         let mut path_iter = absolute_path.iter();
-        let mut current_entry = VfatEntry::from(self.get_root()?);
+        let mut current_entry = DirectoryEntry::from(self.get_root()?);
         path_iter.next();
         for sub_path in path_iter {
             let directory = current_entry.into_directory_or_not_found()?;
-            let directory_iter = directory.iter()?;
-            let matches: Option<VfatEntry> = directory_iter
+            let matches: Option<DirectoryEntry> = directory
+                .contents()?
+                .into_iter()
                 .filter(|entry| entry.metadata().name() == sub_path)
                 .last();
             current_entry = matches.ok_or_else(|| VfatRsError::EntryNotFound {

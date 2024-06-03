@@ -1,4 +1,4 @@
-use crate::api::directory_entry::Attributes;
+use crate::api::raw_directory_entry::Attributes;
 use crate::api::timestamp::VfatTimestamp;
 use crate::ClusterId;
 use crate::PathBuf;

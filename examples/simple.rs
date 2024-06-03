@@ -2,9 +2,11 @@ use std::fs::OpenOptions;
 use std::io::SeekFrom;
 
 use vfat_rs::mbr::MasterBootRecord;
-use vfat_rs::{BlockDevice, FilebackedBlockDevice, SectorId, VfatEntry, VfatFS, VfatMetadataTrait};
+use vfat_rs::{
+    BlockDevice, DirectoryEntry, FilebackedBlockDevice, SectorId, VfatFS, VfatMetadataTrait,
+};
 
-fn print_contents(contents: vfat_rs::Result<Vec<VfatEntry>>) {
+fn print_contents(contents: vfat_rs::Result<Vec<DirectoryEntry>>) {
     println!(
         "Root directory content: {:?}",
         contents

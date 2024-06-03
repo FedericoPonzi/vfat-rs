@@ -1,4 +1,4 @@
-use crate::api::directory_entry::{ID_DELETED_UNUSED_ENTRY, ID_LAST_ENTRY_WAS_LAST};
+use crate::api::raw_directory_entry::{ID_DELETED_UNUSED_ENTRY, ID_LAST_ENTRY_WAS_LAST};
 
 /// The first byte of an entry is called ID.
 pub enum EntryId {

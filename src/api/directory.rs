@@ -286,8 +286,6 @@ impl Directory {
                 }
                 VfatDirectoryEntry::Regular(regular) => {
                     let name = if !lfn_name_buff.is_empty() {
-                        // sort lfn_name_buff by first element of the tuple
-                        lfn_name_buff.sort();
                         Self::string_from_lfn(lfn_name_buff)
                     } else {
                         regular.full_name()
@@ -338,14 +336,6 @@ impl Directory {
         while cluster_chain_reader.read(&mut buf)? > 0 {
             let unknown_entries: [UnknownDirectoryEntry; ENTRIES_AMOUNT] =
                 unknown_entry_convert_from_bytes_entries(buf);
-            //debug!("Unknown entries: {:?}", unknown_entries);
-            /*#[cfg(debug_assertions)]
-            unknown_entries
-                .iter()
-                .map(VfatDirectoryEntry::from)
-                //.take_while(filter_invalid)
-                .for_each(|entry| info!("unknown entry to vfat directory entry: {:?}", entry));
-            */
             entries.extend(
                 unknown_entries
                     .iter()
@@ -437,9 +427,11 @@ impl Directory {
         // Build the string.
         lfn_vec
             .into_iter()
-            .map(|(_, name)| name)
-            .collect::<Vec<String>>()
-            .join("")
+            .map(|(_, s)| s)
+            .fold(String::new(), |mut acc, s| {
+                acc.push_str(&s);
+                acc
+            })
     }
 
     pub fn rename(&mut self, target_name: String, new_name: String) -> error::Result<()> {
@@ -521,7 +513,6 @@ impl Directory {
                 VfatDirectoryEntry::Deleted(_) => lfn_buff.clear(),
                 VfatDirectoryEntry::Regular(regular) => {
                     let name = if !lfn_buff.is_empty() {
-                        lfn_buff.sort();
                         let file_name = Self::string_from_lfn(lfn_buff);
                         // prepare the buffer for the next file.
                         lfn_buff = Vec::new();

@@ -24,7 +24,19 @@ const BUF_SIZE: usize = mem::size_of::<UnknownDirectoryEntry>() * ENTRIES_AMOUNT
 pub fn unknown_entry_convert_from_bytes_entries(
     entries: [u8; BUF_SIZE],
 ) -> [UnknownDirectoryEntry; ENTRIES_AMOUNT] {
-    unsafe { mem::transmute(entries) }
+    // Initialize result array using const fn from_fn for Copy types
+    let mut result: [UnknownDirectoryEntry; ENTRIES_AMOUNT] =
+        [UnknownDirectoryEntry::from([0u8; 32]); ENTRIES_AMOUNT];
+
+    // Parse each 32-byte chunk into an UnknownDirectoryEntry
+    for (i, chunk) in entries
+        .chunks_exact(mem::size_of::<UnknownDirectoryEntry>())
+        .enumerate()
+    {
+        let entry_bytes: [u8; 32] = chunk.try_into().expect("chunk size mismatch");
+        result[i] = UnknownDirectoryEntry::from(entry_bytes);
+    }
+    result
 }
 
 #[derive(Debug)]

@@ -103,14 +103,17 @@ impl VfatFS {
         let root_cluster = ClusterId::new(full_ebpb.extended.root_cluster);
         let eoc_marker = Self::read_end_of_chain_marker(&mut device, fat_start_sector)?;
         let sector_size = device.sector_size();
+        let fat_amount = full_ebpb.bpb.fat_amount;
+        let sectors_per_fat = full_ebpb.extended.sectors_per_fat;
         let cached_partition = CachedPartition::new(
             device,
             sector_size,
             fat_start_sector,
             sectors_per_cluster,
             data_start_sector,
+            fat_amount,
+            sectors_per_fat,
         );
-        let sectors_per_fat = full_ebpb.extended.sectors_per_fat;
         if full_ebpb.extended.signature != EBPF_VFAT_MAGIC
             && full_ebpb.extended.signature != EBPF_VFAT_MAGIC_ALT
         {
@@ -378,6 +381,8 @@ mod test {
         let fat_start_sector = SectorId(0);
         let sectors_per_cluster = 1;
         let data_start_sector = SectorId(2);
+        let fat_amount = 2;
+        let sectors_per_fat = 1;
         let vfat = VfatFS {
             device: Arc::new(CachedPartition::new(
                 dev,
@@ -385,9 +390,11 @@ mod test {
                 fat_start_sector,
                 sectors_per_cluster,
                 data_start_sector,
+                fat_amount,
+                sectors_per_fat,
             )),
             fat_start_sector,
-            sectors_per_fat: 1,
+            sectors_per_fat,
             root_cluster: ClusterId::new(0),
             eoc_marker: Default::default(),
             time_manager: TimeManagerNoop::new_arc(),

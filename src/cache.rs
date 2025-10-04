@@ -19,6 +19,10 @@ pub(crate) struct CachedPartition {
     pub(crate) sectors_per_cluster: u32,
     /// First sector containing actual data - after all FAT tables.
     pub(crate) data_start_sector: SectorId,
+    /// Number of FAT copies (typically 2 for redundancy)
+    pub(crate) fat_amount: u8,
+    /// Number of sectors per FAT table
+    pub(crate) sectors_per_fat: u32,
 }
 impl CachedPartition {
     pub fn new<T>(
@@ -27,6 +31,8 @@ impl CachedPartition {
         fat_start_sector: SectorId,
         sectors_per_cluster: u32,
         data_start_sector: SectorId,
+        fat_amount: u8,
+        sectors_per_fat: u32,
     ) -> Self
     where
         T: BlockDevice + 'static,
@@ -38,6 +44,8 @@ impl CachedPartition {
             fat_start_sector,
             sectors_per_cluster,
             data_start_sector,
+            fat_amount,
+            sectors_per_fat,
         }
     }
 

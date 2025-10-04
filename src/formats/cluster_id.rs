@@ -7,11 +7,6 @@ impl From<ClusterId> for u32 {
         cid.0
     }
 }
-impl From<ClusterId> for f64 {
-    fn from(cid: ClusterId) -> Self {
-        cid.0 as u64 as f64
-    }
-}
 
 impl ClusterId {
     pub fn new(id: u32) -> Self {

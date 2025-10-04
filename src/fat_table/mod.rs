@@ -16,13 +16,13 @@ mod fat_writer;
 fn get_params(device: &CachedPartition, cluster_id: ClusterId) -> error::Result<(SectorId, usize)> {
     // this should be 512 / 32 = 18
     let fat_entries_per_sector = device.sector_size / FAT_ENTRY_SIZE;
-    // In which sector is this cid contained? Cid: 222 / 18 = 12.3333
+    // In which sector is this cid contained? Cid: 222 / 18 = 12
 
-    let containing_sector = (f64::from(cluster_id) / fat_entries_per_sector as f64).floor() as u32;
+    let cluster_id_val = u32::from(cluster_id);
+    let containing_sector = cluster_id_val / fat_entries_per_sector as u32;
     // The sector is 12, now let's calculate the offset in that sector: 222 % 18 = 6.
 
-    let offset_in_sector = ((f64::from(cluster_id) % fat_entries_per_sector as f64).floor()
-        as usize)
+    let offset_in_sector = ((cluster_id_val % fat_entries_per_sector as u32) as usize)
         .checked_mul(FAT_ENTRY_SIZE)
         .ok_or(CheckedMulFailed)?;
 

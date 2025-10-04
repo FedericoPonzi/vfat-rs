@@ -192,7 +192,7 @@ impl VfatFS {
     /// Finds a free clusters and updates the chain:
     ///  * previous cluster in the chain to point to the newly allocated one,
     /// * new clusterId added as final entry
-    /// TODO: invert writes, first update head, and then allocate the cluster.
+    // TODO: invert writes, first update head, and then allocate the cluster.
     pub(crate) fn allocate_cluster_to_chain(&self, head: ClusterId) -> Result<ClusterId> {
         info!("Allocating cluster to chain: {}", head);
         debug!("Head cluster: {}", head);

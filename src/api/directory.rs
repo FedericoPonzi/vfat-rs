@@ -469,20 +469,6 @@ impl Directory {
         } else {
             self.last_entry_spot.unwrap()
         };
-
-        info!(
-            "Going to use as metadata: {:?}. self metadatapath= '{}', selfmetadata name = '{}'. My attributes: {:?}, cluster: {:?}",
-            metadata,
-            self.metadata.full_path().display(),
-            self.metadata.name(),
-            self.metadata.attributes,
-            self.metadata.cluster
-        );
-        info!(
-            "Found spot: {:?}, Going to append entries: {:?}",
-            first_empty_spot_offset, entries
-        );
-
         let mut ccw = self
             .vfat_filesystem
             .cluster_chain_writer(self.metadata.cluster);

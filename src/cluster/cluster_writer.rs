@@ -50,7 +50,7 @@ impl ClusterChainWriter {
         // Calculate in which cluster this offset falls:
         let cluster_size =
             self.vfat_fs.device.sectors_per_cluster as usize * self.vfat_fs.device.sector_size;
-        let cluster_offset = (offset as f64 / cluster_size as f64).floor() as usize;
+        let cluster_offset = offset / cluster_size;
         debug!("Cluster offset: {}", cluster_offset);
         // Calculate in which sector this offset falls:
         let sector_offset = offset / self.vfat_fs.device.sector_size

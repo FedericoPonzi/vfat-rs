@@ -34,7 +34,7 @@ impl ClusterChainReader {
     pub fn seek(&mut self, offset: usize) -> Result<()> {
         // Calculate in which cluster this offset falls:
         let cluster_size = self.device.sectors_per_cluster as usize * self.device.sector_size;
-        let cluster_offset = (offset as f64 / cluster_size as f64).floor() as usize;
+        let cluster_offset = offset / cluster_size;
 
         // Calculate in which sector this offset falls:
         let sector_offset =

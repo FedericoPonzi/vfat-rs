@@ -1,8 +1,12 @@
 use alloc::sync::Arc;
 
-use crate::error::Result;
+use crate::error::{self, Result};
 use crate::fat_table::{get_params, FatEntry};
 use crate::{fat_table, ArcMutex, CachedPartition, ClusterId};
+use snafu::ensure;
+
+/// Maximum cluster chain length to prevent infinite loops in corrupted filesystems.
+const MAX_CLUSTER_CHAIN_LENGTH: u32 = 1_048_576;
 
 /// Delete a cluster chain starting from `current`.
 /// TODO: Start from the end of the chain to make the operation safer.
@@ -13,9 +17,17 @@ pub(crate) fn delete_cluster_chain(
     device: ArcMutex<CachedPartition>,
 ) -> Result<()> {
     const DELETED_ENTRY: FatEntry = FatEntry::Unused;
+    let mut iterations = 0;
     while let Some(next) = fat_table::next_cluster(current, device.clone())? {
+        ensure!(
+            iterations < MAX_CLUSTER_CHAIN_LENGTH,
+            error::FilesystemCorruptedSnafu {
+                reason: "Cluster chain exceeds maximum length (possible circular reference)"
+            }
+        );
         set_fat_entry(device.clone(), current, DELETED_ENTRY)?;
         current = next;
+        iterations += 1;
     }
 
     set_fat_entry(device, current, DELETED_ENTRY)?;

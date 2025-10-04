@@ -19,6 +19,10 @@ use crate::{
 };
 use crate::{PathBuf, TimeManagerTrait};
 
+/// Maximum cluster chain length to prevent infinite loops in corrupted filesystems.
+/// 2^20 = 1,048,576 iterations supports files up to 512GB with 512KB clusters.
+const MAX_CLUSTER_CHAIN_LENGTH: u32 = 1_048_576;
+
 /// Main entry point for your VFAT filesystem.
 ///
 /// Every file and directory object will keep a copy of this struct.
@@ -216,9 +220,19 @@ impl VfatFS {
     fn get_last_cluster_in_chain(&self, starting: ClusterId) -> Result<ClusterId> {
         info!("Getting last cluster in the chain..");
         let mut last = starting;
+        let mut iterations = 0;
         loop {
+            ensure!(
+                iterations < MAX_CLUSTER_CHAIN_LENGTH,
+                error::FilesystemCorruptedSnafu {
+                    reason: "Cluster chain exceeds maximum length (possible circular reference)"
+                }
+            );
             match fat_table::next_cluster(last, self.device.clone())? {
-                Some(cluster_id) => last = cluster_id,
+                Some(cluster_id) => {
+                    last = cluster_id;
+                    iterations += 1;
+                }
                 None => return Ok(last),
             }
         }
@@ -360,6 +374,77 @@ mod test {
         {
             "ArrayBackedBlockDevice"
         }
+    }
+
+    /// Mock device that simulates a circular cluster chain for testing loop detection.
+    /// Chain: 2 → 3 → 4 → 2 (circular)
+    pub struct CircularChainDevice;
+
+    impl BlockDevice for CircularChainDevice {
+        fn read_sector(&mut self, sector: SectorId, buf: &mut [u8]) -> Result<usize> {
+            self.read_sector_offset(sector, 0, buf)
+        }
+
+        fn read_sector_offset(
+            &mut self,
+            _sector: SectorId,
+            _offset: usize,
+            buf: &mut [u8],
+        ) -> Result<usize> {
+            // Simulate FAT entries: cluster 2→3, 3→4, 4→2 (circular)
+            // For simplicity, assume all reads get cluster 3 (next in chain)
+            // In reality this would need to check the cluster being read
+            buf[0..4].copy_from_slice(&3u32.to_le_bytes());
+            Ok(4)
+        }
+
+        fn write_sector_offset(
+            &mut self,
+            _sector: SectorId,
+            _offset: usize,
+            _buf: &[u8],
+        ) -> Result<usize> {
+            unreachable!()
+        }
+
+        fn get_canonical_name() -> &'static str
+        where
+            Self: Sized,
+        {
+            "CircularChainDevice"
+        }
+    }
+
+    #[test]
+    fn test_circular_cluster_chain_detection() {
+        let dev = CircularChainDevice;
+        let vfat = VfatFS {
+            device: Arc::new(CachedPartition::new(
+                dev,
+                512,
+                SectorId(1),
+                1,
+                SectorId(100),
+                2,
+                50,
+            )),
+            fat_start_sector: SectorId(1),
+            sectors_per_fat: 50,
+            root_cluster: ClusterId::new(2),
+            eoc_marker: Default::default(),
+            time_manager: TimeManagerNoop::new_arc(),
+        };
+
+        // Attempt to traverse the circular chain - should return error, not hang
+        let result = vfat.get_last_cluster_in_chain(ClusterId::new(2));
+
+        assert!(result.is_err(), "Expected error for circular cluster chain");
+        let err = result.unwrap_err();
+        assert!(
+            format!("{}", err).contains("Filesystem corruption"),
+            "Error should indicate filesystem corruption, got: {}",
+            err
+        );
     }
 
     #[test]

@@ -34,6 +34,8 @@ pub enum VfatRsError {
     CannotDeletePseudoDir { target: String },
     #[snafu(display("Path '{}' is not absolute.", target))]
     PathNotAbsolute { target: String },
+    #[snafu(display("Filesystem corruption detected: {}", reason))]
+    FilesystemCorrupted { reason: &'static str },
 }
 
 impl From<IoError> for VfatRsError {

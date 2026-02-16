@@ -46,7 +46,7 @@ pub(crate) fn set_fat_entry(
     // Write to all FAT copies for redundancy (FAT mirroring)
     // Typically fat_amount is 2, but FAT32 spec allows up to 4 copies
     for fat_num in 0..device.fat_amount {
-        let fat_sector = crate::SectorId(sector.0 + (fat_num as u32 * device.sectors_per_fat));
+        let fat_sector = sector + (fat_num as u32 * device.sectors_per_fat);
         device
             .clone()
             .write_sector_offset(fat_sector, offset, &entry_bytes)?;

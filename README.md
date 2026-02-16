@@ -50,7 +50,7 @@ cargo run --example simple --features std
 
 To run the setup.sh script, I've added an exception for my user in the sudoers file:
 
-```
+```text
 fponzi ALL=(ALL) NOPASSWD: /usr/bin/mount,/usr/bin/umount
 ```
 
@@ -68,13 +68,13 @@ $ gdisk -l fat32.fs
 
 and you can get info about the filesystem with `fdisk`:
 
-```
+```text
 $ fdisk -l fat32.fs
 ```
 
 Some simple script to flush fs changes:
 
-```
+```bash
 sudo umount /mnt/test
 sudo mount -o loop,offset=$((2048*512)) /tmp/irisos_fat32/fat32.fs /mnt/test/
 ls -l /mnt/test
@@ -92,7 +92,7 @@ sudo dosfsck -r -l -v -r /dev/loop13
 
 To mount with `777` permission:
 
-```
+```bash
 sudo mount -o loop,offset=$((2048*512)),uid=1000,gid=1000,dmask=0000,fmask=0001 fat32.fs /mnt/test/
 ```
 

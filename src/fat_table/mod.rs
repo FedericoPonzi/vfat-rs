@@ -26,7 +26,7 @@ fn get_params(device: &CachedPartition, cluster_id: ClusterId) -> error::Result<
         .checked_mul(FAT_ENTRY_SIZE)
         .ok_or(CheckedMulFailed)?;
 
-    let sector = SectorId(device.fat_start_sector + containing_sector);
+    let sector = device.fat_start_sector + containing_sector;
 
     Ok((sector, offset_in_sector))
 }

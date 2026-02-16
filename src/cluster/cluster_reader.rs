@@ -109,7 +109,7 @@ impl ClusterChainReader {
             assert!(self.offset_byte_in_current_sector <= self.device.sector_size);
 
             if self.offset_byte_in_current_sector == self.device.sector_size {
-                self.current_sector = SectorId(self.current_sector + 1);
+                self.current_sector = self.current_sector + 1;
                 self.offset_byte_in_current_sector = 0;
             }
         }

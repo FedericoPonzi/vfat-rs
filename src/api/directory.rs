@@ -3,7 +3,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::mem;
 
-use log::{debug, error, info};
+use log::{debug, info};
 use snafu::ensure;
 
 use crate::api::raw_directory_entry::EntryId::Deleted;
@@ -279,17 +279,14 @@ impl Directory {
         Ok(())
     }
 
-    /// Safety: Assumes `target_name` exists in the current directory.
-    ///
-    fn delete_entry(&mut self, target_name: String) -> error::Result<()> {
-        // to delete the directory entry
-        // recreate the entry with lfn, and set deleted id.
-
-        info!("Running delete entry");
+    /// Find a named entry in this directory, returning its index and associated LFN entries.
+    fn find_entry_index(
+        &self,
+        target_name: &str,
+    ) -> error::Result<(usize, RegularDirectoryEntry, Vec<LongFileNameEntry>)> {
+        let entries = self.contents_direntry()?;
         let mut lfn_name_buff: Vec<(u8, String)> = Vec::new();
         let mut lfn_entries_buff: Vec<LongFileNameEntry> = Vec::new();
-
-        let entries = self.contents_direntry()?;
 
         for (index, dir_entry) in entries.into_iter().enumerate() {
             match dir_entry {
@@ -298,8 +295,8 @@ impl Directory {
                     lfn_entries_buff.push(lfn);
                 }
                 VfatDirectoryEntry::Deleted(_) => {
-                    lfn_entries_buff.clear();
                     lfn_name_buff.clear();
+                    lfn_entries_buff.clear();
                 }
                 VfatDirectoryEntry::Regular(regular) => {
                     let name = if !lfn_name_buff.is_empty() {
@@ -308,30 +305,32 @@ impl Directory {
                         regular.full_name()
                     };
                     if name == target_name {
-                        // set all the lfn entries as deleted.
-                        for entry in mem::take(&mut lfn_entries_buff).into_iter().rev().enumerate() {
-                            let mut unknown: UnknownDirectoryEntry = entry.1.into();
-                            unknown.set_id(Deleted);
-                            self.update_entry_by_index(unknown, index - entry.0 - 1)?;
-                        }
-                        let mut unknown: UnknownDirectoryEntry = regular.into();
-                        unknown.set_id(Deleted);
-                        self.update_entry_by_index(unknown, index)?;
-                        return Ok(());
+                        return Ok((index, regular, mem::take(&mut lfn_entries_buff)));
                     }
-                    lfn_name_buff.clear();
                     lfn_entries_buff.clear();
                 }
-                // The for loop stops on EndOfEntries
-                VfatDirectoryEntry::EndOfEntries(_) => {
-                    panic!("This cannot happen! Found EndOfEntries")
-                }
-            };
+                VfatDirectoryEntry::EndOfEntries(_) => break,
+            }
         }
-        error!("Directory update entry {}: file not found!!", target_name);
         Err(error::VfatRsError::FileNotFound {
-            target: target_name,
+            target: target_name.to_string(),
         })
+    }
+
+    fn delete_entry(&mut self, target_name: String) -> error::Result<()> {
+        info!("Running delete entry");
+        let (index, regular, lfn_entries) = self.find_entry_index(&target_name)?;
+
+        // set all the lfn entries as deleted.
+        for (i, lfn) in lfn_entries.into_iter().rev().enumerate() {
+            let mut unknown: UnknownDirectoryEntry = lfn.into();
+            unknown.set_id(Deleted);
+            self.update_entry_by_index(unknown, index - i - 1)?;
+        }
+        let mut unknown: UnknownDirectoryEntry = regular.into();
+        unknown.set_id(Deleted);
+        self.update_entry_by_index(unknown, index)?;
+        Ok(())
     }
     fn delete_cluster_chain(&mut self, entry: &DirectoryEntry) -> error::Result<()> {
         info!(
@@ -496,44 +495,14 @@ impl Directory {
     }
 
     // TODO: Currently this doesn't support renaming file, just updating/replacing metadatas...
-    // TODO: lfn_name_buff should be sorted by position.
     fn update_entry_inner(
         &mut self,
         target_name: String,
         new_entry: UnknownDirectoryEntry,
     ) -> error::Result<()> {
         debug!("Running update entry routine...");
-        let mut lfn_buff: Vec<(u8, String)> = Vec::new();
-
-        let entries = self.contents_direntry()?;
-        //info!("target_name: {}, entries: {:?}", target_name, entries);
-        for (index, dir_entry) in entries.iter().enumerate() {
-            match dir_entry {
-                VfatDirectoryEntry::LongFileName(lfn) => {
-                    lfn_buff.push((lfn.sequence_number.get_position(), lfn.collect_name()))
-                }
-                VfatDirectoryEntry::Deleted(_) => lfn_buff.clear(),
-                VfatDirectoryEntry::Regular(regular) => {
-                    let name = if !lfn_buff.is_empty() {
-                        Self::string_from_lfn(mem::take(&mut lfn_buff))
-                    } else {
-                        regular.full_name()
-                    };
-                    if name == target_name {
-                        self.update_entry_by_index(new_entry, index)?;
-                        return Ok(());
-                    }
-                }
-                // The for loop stops on EndOfEntries
-                VfatDirectoryEntry::EndOfEntries(_) => {
-                    panic!("This cannot happen! Found EndOfEntries")
-                }
-            };
-        }
-        error!("Directory update entry {}: file not found!!", target_name);
-        Err(error::VfatRsError::FileNotFound {
-            target: target_name,
-        })
+        let (index, _, _) = self.find_entry_index(&target_name)?;
+        self.update_entry_by_index(new_entry, index)
     }
 
     // Replace entry with index `index` with input `entry`.

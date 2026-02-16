@@ -1,4 +1,4 @@
-use core::{fmt, ops};
+use core::fmt;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ClusterId(u32);
@@ -33,17 +33,6 @@ impl ClusterId {
 impl fmt::Display for ClusterId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl<T> ops::Sub<T> for ClusterId
-where
-    T: Into<i64>,
-{
-    type Output = i64;
-
-    fn sub(self, other: T) -> Self::Output {
-        self.0 as i64 - other.into()
     }
 }
 

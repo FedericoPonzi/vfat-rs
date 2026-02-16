@@ -50,22 +50,16 @@ impl fmt::Debug for VfatFS {
 }
 
 impl VfatFS {
-    #[cfg(not(feature = "std"))]
-    /// Create a new VFat filesystem using TimeManagerNoop.
+    /// Create a new VFat filesystem with a default time manager.
     pub fn new<B: BlockDevice + 'static>(
         device: B,
-        // time_manager: T,
         partition_start_sector: u32,
     ) -> Result<Self> {
-        let no_op = crate::time::TimeManagerNoop::new();
-        Self::new_tm(device, partition_start_sector, no_op)
-    }
-
-    #[cfg(feature = "std")]
-    /// Create a new VFat filesystem using Chronos a time manager.
-    pub fn new<B: BlockDevice + 'static>(device: B, partition_start_sector: u32) -> Result<Self> {
-        let chronos_tm = crate::time::TimeManagerChronos::new();
-        Self::new_tm(device, partition_start_sector, chronos_tm)
+        #[cfg(feature = "std")]
+        let tm = crate::time::TimeManagerChronos::new();
+        #[cfg(not(feature = "std"))]
+        let tm = crate::time::TimeManagerNoop::new();
+        Self::new_tm(device, partition_start_sector, tm)
     }
 
     /// Create a new VFat filesystem using a custom time manager.
@@ -101,7 +95,6 @@ impl VfatFS {
         let fats_total_size = full_ebpb.extended.sectors_per_fat * full_ebpb.bpb.fat_amount as u32;
         let data_start_sector =
             fat_start_sector + fats_total_size + full_ebpb.sectors_occupied_by_all_fats();
-        let data_start_sector = SectorId(data_start_sector);
 
         let sectors_per_cluster = full_ebpb.bpb.sectors_per_cluster as u32;
         let root_cluster = ClusterId::new(full_ebpb.extended.root_cluster);
@@ -164,7 +157,7 @@ impl VfatFS {
             let mut buf = [0; BUF_SIZE];
             info!("reading sector: {}/{}", i, self.sectors_per_fat);
             self.device
-                .read_sector(SectorId(self.fat_start_sector + i), &mut buf)?;
+                .read_sector(self.fat_start_sector + i, &mut buf)?;
             let mut fat_entries = [FatEntry::default(); ENTRIES_BUF_SIZE];
 
             for (i, bytes) in buf.chunks(4).enumerate() {

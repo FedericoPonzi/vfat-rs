@@ -26,10 +26,10 @@ impl Add for SectorId {
 }
 
 impl Add<u32> for SectorId {
-    type Output = u32;
+    type Output = SectorId;
 
     fn add(self, other: u32) -> Self::Output {
-        self.0 + other
+        SectorId(self.0 + other)
     }
 }
 
@@ -40,6 +40,6 @@ mod test {
     #[test]
     fn test_sector_sum() {
         assert_eq!(SectorId(1) + SectorId(1), SectorId(2));
-        assert_eq!(SectorId(1) + 2, 3);
+        assert_eq!(SectorId(1) + 2, SectorId(3));
     }
 }

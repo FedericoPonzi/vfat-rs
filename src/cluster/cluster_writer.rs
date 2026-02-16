@@ -117,7 +117,7 @@ impl ClusterChainWriter {
 
             if self.offset_byte_in_current_sector == self.vfat_fs.device.sector_size {
                 // Sector is finished, let's go to the next one
-                self.current_sector = SectorId(self.current_sector + 1);
+                self.current_sector = self.current_sector + 1;
                 self.offset_byte_in_current_sector = 0;
             }
         }

@@ -7,7 +7,6 @@ use core::fmt::Debug;
 use core::iter;
 
 use log::{debug, info};
-use regex::Regex;
 
 pub use crate::api::raw_directory_entry::formats::{attribute, Attributes, EntryId};
 pub use crate::api::raw_directory_entry::long_file_name_entry::{
@@ -179,18 +178,15 @@ impl VfatDirectoryEntry {
     fn get_regular_filename_ext(name: &str) -> [u8; 3] {
         let mut ext: [u8; 3] = [PADDING_CHARACTER; 3];
 
-        if Regex::new(r"\.[a-zA-Z]{1,3}$").unwrap().is_match(name) {
-            name.chars()
-                .rev()
-                .take_while(|ch| *ch != '.')
-                .collect::<String>()
-                .chars()
-                .rev()
-                .flat_map(|ch| ch.to_uppercase())
-                .enumerate()
-                .for_each(|(index, ch)| {
+        if let Some(dot_pos) = name.rfind('.') {
+            let ext_str = &name[dot_pos + 1..];
+            if (1..=3).contains(&ext_str.len())
+                && ext_str.chars().all(|c| c.is_ascii_alphabetic())
+            {
+                for (index, ch) in ext_str.chars().flat_map(|ch| ch.to_uppercase()).enumerate() {
                     ext[index] = ch as u8;
-                });
+                }
+            }
         }
         ext
     }

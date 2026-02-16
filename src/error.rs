@@ -66,13 +66,10 @@ impl From<VfatRsError> for binrw::io::Error {
 
 impl From<binrw::Error> for VfatRsError {
     fn from(err: binrw::Error) -> Self {
-        // todo
         let kind = crate::io::ErrorKind::Other;
         match err {
             binrw::Error::Io(_err) => Self::from(IoError::new(kind, "IoError")),
-            _ => {
-                panic!("todo.")
-            }
+            _ => Self::from(IoError::new(kind, "binrw error")),
         }
     }
 }

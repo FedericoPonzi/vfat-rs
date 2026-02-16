@@ -62,7 +62,7 @@ impl BlockDevice for FilebackedBlockDevice {
         debug!("Writing the buffer to the image..");
         self.image.write_all(buf).expect("Write sector");
         debug!("Written: {}", buf.len());
-        self.image.flush().unwrap();
+        self.image.flush().map_err(|_| crate::io::ErrorKind::Other)?;
         Ok(buf.len())
     }
 

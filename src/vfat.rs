@@ -142,7 +142,7 @@ impl VfatFS {
         const ENTRIES_BUF_SIZE: usize = 1;
         const BUF_SIZE: usize = FAT_ENTRY_SIZE * ENTRIES_BUF_SIZE;
         let mut buf = [0; BUF_SIZE];
-        device.read_sector(fat_start_sector, &mut buf).unwrap();
+        device.read_sector(fat_start_sector, &mut buf)?;
         let raw_entry = FatEntry::from(buf);
         info!("End of chain marker: {:?}", raw_entry);
         Ok(raw_entry)
@@ -164,8 +164,7 @@ impl VfatFS {
             let mut buf = [0; BUF_SIZE];
             info!("reading sector: {}/{}", i, self.sectors_per_fat);
             self.device
-                .read_sector(SectorId(self.fat_start_sector + i), &mut buf)
-                .unwrap();
+                .read_sector(SectorId(self.fat_start_sector + i), &mut buf)?;
             let mut fat_entries = [FatEntry::default(); ENTRIES_BUF_SIZE];
 
             for (i, bytes) in buf.chunks(4).enumerate() {

@@ -40,10 +40,10 @@ impl From<[u8; 512]> for MasterBootRecord {
 
 impl MasterBootRecord {
     /// Load a MBR from a device T.
-    pub fn load<T: BlockDevice>(mut device: T) -> MasterBootRecord {
+    pub fn load<T: BlockDevice>(mut device: T) -> error::Result<MasterBootRecord> {
         let mut buff = [0; 512];
-        device.read_sector(SectorId(0), &mut buff).unwrap();
-        MasterBootRecord::from(buff)
+        device.read_sector(SectorId(0), &mut buff)?;
+        Ok(MasterBootRecord::from(buff))
     }
     /// Returns OK if index is a vfat partition.
     pub fn get_vfat_partition(&self, index: usize) -> error::Result<&PartitionEntry> {

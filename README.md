@@ -1,5 +1,7 @@
 # VFAT / FAT32
 
+[![CI](https://github.com/FedericoPonzi/vfat-rs/actions/workflows/CI.yml/badge.svg)](https://github.com/FedericoPonzi/vfat-rs/actions/workflows/CI.yml)
+
 A simple VFAT implementation written in rust, and mostly tested against Linux's vfat driver.
 
 It aims to be straightforward to understand and easy to use in a custom kernel.

@@ -12,7 +12,7 @@ use crate::SectorId;
 /// An interface to the underlaying Block Device.
 /// It will cache entries, and help with reading and writing sectors.
 pub(crate) struct CachedPartition {
-    device: SpinMutex<Box<dyn BlockDevice>>,
+    device: SpinMutex<Box<dyn BlockDevice + Send>>,
     pub(crate) sector_size: usize,
     pub(crate) fat_start_sector: SectorId,
     /// How many sectors are mapped to a single cluster
@@ -35,7 +35,7 @@ impl CachedPartition {
         sectors_per_fat: u32,
     ) -> Self
     where
-        T: BlockDevice + 'static,
+        T: BlockDevice + Send + 'static,
     {
         info!("Creating cached partition");
         Self {

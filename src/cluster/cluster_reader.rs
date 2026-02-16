@@ -68,9 +68,9 @@ impl ClusterChainReader {
             amount += current_amount_read;
             if current_amount_read == 0 {
                 self.current_cluster = self.next_cluster()?;
-                if self.current_cluster.is_some() {
+                if let Some(cluster) = self.current_cluster {
                     self.current_sector =
-                        self.device.cluster_to_sector(self.current_cluster.unwrap());
+                        self.device.cluster_to_sector(cluster);
                     self.offset_byte_in_current_sector = 0;
                 }
             }

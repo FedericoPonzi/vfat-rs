@@ -112,10 +112,10 @@ impl Directory {
             Self::attributes_from_entry(&entry_type),
         );
         let entries_len = entries.len();
-        let first_empty_spot_offset = if self.last_entry_spot.is_none() {
-            self.find_first_empty_spot_offset()?
+        let first_empty_spot_offset = if let Some(spot) = self.last_entry_spot {
+            spot
         } else {
-            self.last_entry_spot.unwrap()
+            self.find_first_empty_spot_offset()?
         };
 
         info!(
@@ -471,10 +471,10 @@ impl Directory {
         let entries: Vec<UnknownDirectoryEntry> =
             VfatDirectoryEntry::new_vfat_entry(new_name.as_str(), metadata.cluster, attributes);
         let entries_len = entries.len();
-        let first_empty_spot_offset = if self.last_entry_spot.is_none() {
-            self.find_first_empty_spot_offset()?
+        let first_empty_spot_offset = if let Some(spot) = self.last_entry_spot {
+            spot
         } else {
-            self.last_entry_spot.unwrap()
+            self.find_first_empty_spot_offset()?
         };
         let mut ccw = self
             .vfat_filesystem

@@ -59,7 +59,7 @@ impl From<UnknownDirectoryEntry> for VfatDirectoryEntry {
 
 impl From<&UnknownDirectoryEntry> for VfatDirectoryEntry {
     fn from(unknown: &UnknownDirectoryEntry) -> Self {
-        VfatDirectoryEntry::from(unknown.clone())
+        VfatDirectoryEntry::from(*unknown)
     }
 }
 
@@ -259,7 +259,7 @@ impl VfatDirectoryEntry {
         const SINGLE_LFN_SIZE: usize = 5 + 6 + 2;
         // TODO: this cast to u8 might overflow. this is because lfn have a limit in length. in that case we should error.
         // Integer division with ceiling: (a + b - 1) / b
-        let required_lfns = ((name.len() + SINGLE_LFN_SIZE - 1) / SINGLE_LFN_SIZE) as u8;
+        let required_lfns = (name.len().div_ceil(SINGLE_LFN_SIZE)) as u8;
         debug!("Required LFNS: {}", required_lfns);
         // Other then for stopping the loop below, it's also useful for the SequenceNumber attribute.
 

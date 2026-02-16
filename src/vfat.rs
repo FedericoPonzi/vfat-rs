@@ -51,7 +51,7 @@ impl fmt::Debug for VfatFS {
 
 impl VfatFS {
     /// Create a new VFat filesystem with a default time manager.
-    pub fn new<B: BlockDevice + 'static>(
+    pub fn new<B: BlockDevice + Send + 'static>(
         device: B,
         partition_start_sector: u32,
     ) -> Result<Self> {
@@ -63,7 +63,7 @@ impl VfatFS {
     }
 
     /// Create a new VFat filesystem using a custom time manager.
-    pub fn new_tm<B: BlockDevice + 'static>(
+    pub fn new_tm<B: BlockDevice + Send + 'static>(
         mut device: B,
         partition_start_sector: u32,
         time_manager: impl TimeManagerTrait + 'static,
@@ -84,7 +84,7 @@ impl VfatFS {
     }
 
     /// start_sector: Partition's start sector, or "Entry Offset Sector".
-    fn new_with_ebpb<B: BlockDevice + 'static>(
+    fn new_with_ebpb<B: BlockDevice + Send + 'static>(
         mut device: B,
         partition_start_sector: u32,
         full_ebpb: FullExtendedBIOSParameterBlock,

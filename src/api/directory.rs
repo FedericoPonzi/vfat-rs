@@ -266,10 +266,8 @@ impl Directory {
                         .into_iter()
                         .map(|entry| entry.name().to_string())
                         .filter(|entry_name| !PSEUDO_FOLDERS.contains(&entry_name.as_str()))
-                        .fold(String::new(), |mut acc, s| {
-                            acc.push_str(&s);
-                            acc
-                        }),
+                        .collect::<Vec<_>>()
+                        .join(", "),
                 });
             }
             target_entry = directory.into();
@@ -305,13 +303,13 @@ impl Directory {
                 }
                 VfatDirectoryEntry::Regular(regular) => {
                     let name = if !lfn_name_buff.is_empty() {
-                        Self::string_from_lfn(lfn_name_buff)
+                        Self::string_from_lfn(mem::take(&mut lfn_name_buff))
                     } else {
                         regular.full_name()
                     };
                     if name == target_name {
                         // set all the lfn entries as deleted.
-                        for entry in lfn_entries_buff.into_iter().rev().enumerate() {
+                        for entry in mem::take(&mut lfn_entries_buff).into_iter().rev().enumerate() {
                             let mut unknown: UnknownDirectoryEntry = entry.1.into();
                             unknown.set_id(Deleted);
                             self.update_entry_by_index(unknown, index - entry.0 - 1)?;
@@ -321,8 +319,8 @@ impl Directory {
                         self.update_entry_by_index(unknown, index)?;
                         return Ok(());
                     }
-                    lfn_name_buff = Vec::new();
-                    lfn_entries_buff = Vec::new();
+                    lfn_name_buff.clear();
+                    lfn_entries_buff.clear();
                 }
                 // The for loop stops on EndOfEntries
                 VfatDirectoryEntry::EndOfEntries(_) => {
@@ -384,9 +382,7 @@ impl Directory {
                 }
                 VfatDirectoryEntry::Regular(regular) => {
                     let name = if !lfn_buff.is_empty() {
-                        let ret = Self::string_from_lfn(lfn_buff);
-                        lfn_buff = Vec::new();
-                        ret
+                        Self::string_from_lfn(mem::take(&mut lfn_buff))
                     } else {
                         regular.full_name()
                     };
@@ -519,10 +515,7 @@ impl Directory {
                 VfatDirectoryEntry::Deleted(_) => lfn_buff.clear(),
                 VfatDirectoryEntry::Regular(regular) => {
                     let name = if !lfn_buff.is_empty() {
-                        let file_name = Self::string_from_lfn(lfn_buff);
-                        // prepare the buffer for the next file.
-                        lfn_buff = Vec::new();
-                        file_name
+                        Self::string_from_lfn(mem::take(&mut lfn_buff))
                     } else {
                         regular.full_name()
                     };

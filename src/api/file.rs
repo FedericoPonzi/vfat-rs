@@ -62,7 +62,7 @@ impl File {
             .update_entry(self.metadata.clone())
     }
     fn full_path(&self) -> &PathBuf {
-        return self.metadata.full_path();
+        self.metadata.full_path()
     }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<usize> {

@@ -328,6 +328,7 @@ impl VfatFS {
 
 #[cfg(test)]
 mod test {
+    use alloc::format;
     use alloc::sync::Arc;
     use alloc::vec::Vec;
 

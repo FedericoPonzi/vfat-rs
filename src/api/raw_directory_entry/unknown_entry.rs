@@ -71,7 +71,7 @@ impl From<UnknownDirectoryEntry> for RegularDirectoryEntry {
     }
 }
 
-impl From<UnknownDirectoryEntry> for [u8; mem::size_of::<UnknownDirectoryEntry>()] {
+impl From<UnknownDirectoryEntry> for [u8; size_of::<UnknownDirectoryEntry>()] {
     fn from(entry: UnknownDirectoryEntry) -> Self {
         let mut buf = [0u8; 32];
         buf[0] = entry.id;
@@ -86,18 +86,18 @@ impl From<UnknownDirectoryEntry> for [u8; mem::size_of::<UnknownDirectoryEntry>(
 
 pub fn unknown_entry_convert_to_bytes_2(
     entries: [UnknownDirectoryEntry; 2],
-) -> [u8; mem::size_of::<UnknownDirectoryEntry>() * 2] {
-    let mut result = [0u8; mem::size_of::<UnknownDirectoryEntry>() * 2];
+) -> [u8; size_of::<UnknownDirectoryEntry>() * 2] {
+    let mut result = [0u8; size_of::<UnknownDirectoryEntry>() * 2];
     for (i, entry) in entries.into_iter().enumerate() {
         let entry_bytes: [u8; 32] = entry.into();
-        let start = i * mem::size_of::<UnknownDirectoryEntry>();
-        let end = start + mem::size_of::<UnknownDirectoryEntry>();
+        let start = i * size_of::<UnknownDirectoryEntry>();
+        let end = start + size_of::<UnknownDirectoryEntry>();
         result[start..end].copy_from_slice(&entry_bytes);
     }
     result
 }
-impl From<[u8; mem::size_of::<UnknownDirectoryEntry>()]> for UnknownDirectoryEntry {
-    fn from(buf: [u8; mem::size_of::<UnknownDirectoryEntry>()]) -> Self {
+impl From<[u8; size_of::<UnknownDirectoryEntry>()]> for UnknownDirectoryEntry {
+    fn from(buf: [u8; size_of::<UnknownDirectoryEntry>()]) -> Self {
         Self {
             id: buf[0],
             __unused: buf[1..11].try_into().expect("slice with incorrect length"),

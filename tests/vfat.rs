@@ -3,7 +3,7 @@ use std::fs::OpenOptions;
 use vfat_rs::io::{SeekFrom, Write};
 
 use log::info;
-use rand::Rng;
+use rand::RngExt;
 
 use crate::common::VfatFsRandomPath;
 use block_devs::FilebackedBlockDevice;
@@ -48,8 +48,8 @@ fn init_vfat() -> vfat_rs::Result<(VfatFS, VfatFsRandomPath)> {
 
 /// Returns name and path
 fn random_name(prefix: &str) -> (String, String) {
-    let mut rng = rand::thread_rng();
-    let random_suffix: u32 = rng.gen_range(1..999999);
+    let mut rng = rand::rng();
+    let random_suffix: u32 = rng.random_range(1..999999);
     let name = format!("{}-{}.txt", prefix, random_suffix);
     let path = format!("/{}", name);
     (name, path)
@@ -184,7 +184,7 @@ fn test_get_path() -> vfat_rs::Result<()> {
     let (mut vfat, _f) = init_vfat()?;
     vfat.get_from_absolute_path("/not-found.txt".into())
         .unwrap_err();
-    let file = vfat.get_from_absolute_path("/hello.txt".into()).unwrap();
+    let file = vfat.get_from_absolute_path("/hello.txt".into())?;
     let local: DateTime<Utc> = Utc::now();
 
     // these are add by the local os's vfat implementation
@@ -231,7 +231,7 @@ fn test_list_directory() -> vfat_rs::Result<()> {
 #[test]
 fn test_get_root() -> vfat_rs::Result<()> {
     let (mut vfat, _f) = init_vfat()?;
-    let entry = vfat.get_root().unwrap();
+    let entry = vfat.get_root()?;
     assert_eq!(
         entry.metadata.full_path().display().to_string(),
         entry.metadata.name()
@@ -330,8 +330,7 @@ fn test_file_write(name: &str) -> vfat_rs::Result<()> {
     as_file.write_all(CONTENT).expect("write all");
 
     let mut as_file = vfat
-        .get_from_absolute_path(file_path.as_str().into())
-        .unwrap()
+        .get_from_absolute_path(file_path.as_str().into())?
         .into_file()
         .unwrap();
 
@@ -343,7 +342,7 @@ fn test_file_write(name: &str) -> vfat_rs::Result<()> {
     );
 
     // 5. Read CONTENT back
-    as_file.seek(SeekFrom::Start(0)).unwrap();
+    as_file.seek(SeekFrom::Start(0))?;
     let mut buf = [0; CONTENT.len()];
     as_file.read(&mut buf).expect("Read exact");
     info!("Read: {}", String::from_utf8_lossy(&buf));
@@ -351,12 +350,10 @@ fn test_file_write(name: &str) -> vfat_rs::Result<()> {
 
     as_file.write(CONTENT).expect("second write");
     // return to 0.
-    as_file
-        .seek(SeekFrom::End(-(CONTENT.len() as i64) * 2))
-        .unwrap();
+    as_file.seek(SeekFrom::End(-(CONTENT.len() as i64) * 2))?;
     let mut double_buf = [0u8; CONTENT.len() * 2];
 
-    as_file.read(&mut double_buf).unwrap();
+    as_file.read(&mut double_buf)?;
     info!("Read: {:?}", String::from_utf8_lossy(&double_buf));
     assert_eq!(CONTENT, &double_buf[..CONTENT.len()], "first half");
     assert_eq!(CONTENT, &double_buf[CONTENT.len()..], "second half");
@@ -418,8 +415,7 @@ fn test_big_write_and_read() -> vfat_rs::Result<()> {
     }
 
     let mut as_file = vfat
-        .get_from_absolute_path(file_path.as_str().into())
-        .unwrap()
+        .get_from_absolute_path(file_path.as_str().into())?
         .into_file()
         .unwrap();
 
@@ -431,7 +427,7 @@ fn test_big_write_and_read() -> vfat_rs::Result<()> {
     );
 
     // 5. Read CONTENT back
-    as_file.seek(SeekFrom::Start(0)).unwrap();
+    as_file.seek(SeekFrom::Start(0))?;
     for i in 0..ITERATIONS {
         let mut buf = [0; CONTENT.len()];
         as_file.read(&mut buf).expect("Read exact");
@@ -567,8 +563,7 @@ fn test_disk_full() -> vfat_rs::Result<()> {
             as_file.write_all(CONTENT).expect("write all");
         }
         let as_file = vfat
-            .get_from_absolute_path(file_path.as_str().into())
-            .unwrap()
+            .get_from_absolute_path(file_path.as_str().into())?
             .into_file()
             .unwrap();
         println!("File's metadata: {:?}", as_file.metadata());

@@ -20,12 +20,12 @@ required-features = ["std"]
 [dependencies]
 log = "~0.4"
 snafu = { version = "~0.8", default-features = false }
-binrw = { version = "~0.13", default-features = false }
-spin = "~0.9"
+binrw = { version = "0.15.0", default-features = false }
+spin = "0.10.0"
 chrono = { version = "~0.4", optional = true, default-features = false }
 
 [dev-dependencies]
 env_logger = "~0.11"
-rand = "~0.8"
+rand = "~0.10"
 chrono = "~0.4"
 

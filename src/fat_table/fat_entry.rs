@@ -1,8 +1,6 @@
-use core::mem;
-
 use crate::ClusterId;
 
-pub(crate) const FAT_ENTRY_SIZE: usize = mem::size_of::<u32>();
+pub(crate) const FAT_ENTRY_SIZE: usize = size_of::<u32>();
 
 /// A fat32 row entry. Each entry represents a cluster. This is the "high level" view
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]

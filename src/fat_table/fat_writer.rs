@@ -78,7 +78,7 @@ mod tests {
             _sector: SectorId,
             _offset: usize,
             buf: &mut [u8],
-        ) -> crate::Result<usize> {
+        ) -> Result<usize> {
             // Return dummy data for FAT entry reads
             buf.fill(0xFF);
             Ok(4) // FAT entry size
@@ -89,7 +89,7 @@ mod tests {
             sector: SectorId,
             offset: usize,
             buf: &[u8],
-        ) -> crate::Result<usize> {
+        ) -> Result<usize> {
             self.writes.lock().push((sector, offset, buf.to_vec()));
             Ok(buf.len())
         }

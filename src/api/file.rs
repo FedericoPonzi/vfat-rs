@@ -5,7 +5,7 @@ use core::{cmp, fmt};
 use log::{debug, info};
 
 use crate::api::Metadata;
-use crate::{error, ClusterId, PathBuf, Result, VfatFS, VfatMetadataTrait};
+use crate::{ClusterId, PathBuf, Result, VfatFS, VfatMetadataTrait};
 
 /// A File representation in a VfatFilesystem.
 //#[derive(Clone)]
@@ -170,7 +170,7 @@ impl File {
         Ok(amount_read)
     }
 
-    fn _sync(&mut self) -> error::Result<()> {
+    fn _sync(&mut self) -> Result<()> {
         unimplemented!()
     }
 }

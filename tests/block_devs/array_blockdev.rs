@@ -2,6 +2,7 @@ use vfat_rs::io::Write;
 use vfat_rs::BlockDevice;
 use vfat_rs::SectorId;
 
+//noinspection RsExternalLinter
 pub struct ArrayBackedBlockDevice {
     pub arr: Vec<u8>,
     pub read_iteration: usize,

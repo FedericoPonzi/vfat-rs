@@ -18,8 +18,8 @@ use crate::{ClusterId, VfatFS};
 
 // TODO: this assumes sector size
 const SECTOR_SIZE: usize = 512;
-const ENTRIES_AMOUNT: usize = SECTOR_SIZE / mem::size_of::<UnknownDirectoryEntry>();
-const BUF_SIZE: usize = mem::size_of::<UnknownDirectoryEntry>() * ENTRIES_AMOUNT;
+const ENTRIES_AMOUNT: usize = SECTOR_SIZE / size_of::<UnknownDirectoryEntry>();
+const BUF_SIZE: usize = size_of::<UnknownDirectoryEntry>() * ENTRIES_AMOUNT;
 
 pub fn unknown_entry_convert_from_bytes_entries(
     entries: [u8; BUF_SIZE],
@@ -30,7 +30,7 @@ pub fn unknown_entry_convert_from_bytes_entries(
 
     // Parse each 32-byte chunk into an UnknownDirectoryEntry
     for (i, chunk) in entries
-        .chunks_exact(mem::size_of::<UnknownDirectoryEntry>())
+        .chunks_exact(size_of::<UnknownDirectoryEntry>())
         .enumerate()
     {
         let entry_bytes: [u8; 32] = chunk.try_into().expect("chunk size mismatch");
@@ -137,7 +137,7 @@ impl Directory {
         ccw.seek(first_empty_spot_offset)?;
 
         for unknown_entry in entries.into_iter() {
-            let entry: [u8; mem::size_of::<UnknownDirectoryEntry>()] = unknown_entry.into();
+            let entry: [u8; size_of::<UnknownDirectoryEntry>()] = unknown_entry.into();
             ccw.write(&entry)?;
         }
 
@@ -150,7 +150,7 @@ impl Directory {
         }
         // finally, update entries:
         self.last_entry_spot =
-            Some(first_empty_spot_offset + entries_len * mem::size_of::<UnknownDirectoryEntry>());
+            Some(first_empty_spot_offset + entries_len * size_of::<UnknownDirectoryEntry>());
 
         Ok(match entry_type {
             EntryType::Directory => {
@@ -179,7 +179,7 @@ impl Directory {
                 if entry.is_end_of_entries() {
                     return Ok(offset);
                 }
-                offset += mem::size_of::<UnknownDirectoryEntry>();
+                offset += size_of::<UnknownDirectoryEntry>();
             }
             buff = [0u8; BUF_SIZE];
         }
@@ -482,14 +482,14 @@ impl Directory {
         ccw.seek(first_empty_spot_offset)?;
 
         for unknown_entry in entries.into_iter() {
-            let entry: [u8; mem::size_of::<UnknownDirectoryEntry>()] = unknown_entry.into();
+            let entry: [u8; size_of::<UnknownDirectoryEntry>()] = unknown_entry.into();
             ccw.write(&entry)?;
         }
         metadata.name = new_name;
 
         // finally, update entries:
         self.last_entry_spot =
-            Some(first_empty_spot_offset + entries_len * mem::size_of::<UnknownDirectoryEntry>());
+            Some(first_empty_spot_offset + entries_len * size_of::<UnknownDirectoryEntry>());
         self.delete_entry(target_name)?;
         Ok(())
     }
@@ -512,8 +512,8 @@ impl Directory {
         entry: UnknownDirectoryEntry,
         index: usize,
     ) -> error::Result<()> {
-        let index_offset = mem::size_of::<UnknownDirectoryEntry>() * index;
-        let buf: [u8; mem::size_of::<UnknownDirectoryEntry>()] = entry.into();
+        let index_offset = size_of::<UnknownDirectoryEntry>() * index;
+        let buf: [u8; size_of::<UnknownDirectoryEntry>()] = entry.into();
 
         let mut ccw = self
             .vfat_filesystem

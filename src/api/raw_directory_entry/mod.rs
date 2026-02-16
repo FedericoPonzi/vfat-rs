@@ -180,8 +180,7 @@ impl VfatDirectoryEntry {
 
         if let Some(dot_pos) = name.rfind('.') {
             let ext_str = &name[dot_pos + 1..];
-            if (1..=3).contains(&ext_str.len())
-                && ext_str.chars().all(|c| c.is_ascii_alphabetic())
+            if (1..=3).contains(&ext_str.len()) && ext_str.chars().all(|c| c.is_ascii_alphabetic())
             {
                 for (index, ch) in ext_str.chars().flat_map(|ch| ch.to_uppercase()).enumerate() {
                     ext[index] = ch as u8;
@@ -259,7 +258,7 @@ impl VfatDirectoryEntry {
         const SINGLE_LFN_SIZE: usize = 5 + 6 + 2;
         // TODO: this cast to u8 might overflow. this is because lfn have a limit in length. in that case we should error.
         // Integer division with ceiling: (a + b - 1) / b
-        let required_lfns = (name.len().div_ceil(SINGLE_LFN_SIZE)) as u8;
+        let required_lfns = name.len().div_ceil(SINGLE_LFN_SIZE) as u8;
         debug!("Required LFNS: {}", required_lfns);
         // Other then for stopping the loop below, it's also useful for the SequenceNumber attribute.
 
@@ -367,7 +366,7 @@ mod test {
         );
         let expected_regular_name = b"4CH~1   ";
         let expecte_ext = b"EXT";
-        assert!(given.len() > 0);
+        assert!(!given.is_empty());
 
         let lfn: LongFileNameEntry = VfatDirectoryEntry::from(given.get(0).unwrap())
             .into_long_file_name()

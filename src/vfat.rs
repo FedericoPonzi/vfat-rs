@@ -1,5 +1,5 @@
 use alloc::sync::Arc;
-use core::{fmt, mem};
+use core::fmt;
 
 use binrw::io::Cursor;
 use binrw::BinReaderExt;
@@ -292,7 +292,7 @@ impl VfatFS {
     }
     pub fn get_root(&mut self) -> Result<Directory> {
         const UNKNOWN_ENTRIES: usize = 1;
-        const BUF_SIZE: usize = UNKNOWN_ENTRIES * mem::size_of::<UnknownDirectoryEntry>();
+        const BUF_SIZE: usize = UNKNOWN_ENTRIES * size_of::<UnknownDirectoryEntry>();
         let mut buf = [0; BUF_SIZE];
         let mut cluster_reader = self.cluster_chain_reader(self.root_cluster);
         let _ = cluster_reader.read(&mut buf)?;
@@ -309,7 +309,7 @@ impl VfatFS {
             volume_id.creation_time,
             volume_id.last_modification_time,
             "/",
-            mem::size_of::<RegularDirectoryEntry>() as u32,
+            size_of::<RegularDirectoryEntry>() as u32,
             PathBuf::from("/"),
             self.root_cluster,
             PathBuf::from(""),

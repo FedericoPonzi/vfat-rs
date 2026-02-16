@@ -1,11 +1,11 @@
-use rand::Rng;
+use rand::RngExt;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
 pub fn create_random_dir() -> PathBuf {
-    let random_dir_name: String = rand::thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
+    let random_dir_name: String = rand::rng()
+        .sample_iter(&rand::distr::Alphanumeric)
         .take(10)
         .map(char::from)
         .collect();

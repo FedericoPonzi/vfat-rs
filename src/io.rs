@@ -116,6 +116,11 @@ mod nonstd_io {
         }
 
         #[inline]
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        #[inline]
         fn write_all(&mut self, data: &[u8]) -> Result<()> {
             if self.write(data)? == data.len() {
                 Ok(())
@@ -125,11 +130,6 @@ mod nonstd_io {
                     &"failed to write whole buffer",
                 ))
             }
-        }
-
-        #[inline]
-        fn flush(&mut self) -> Result<()> {
-            Ok(())
         }
     }
 
@@ -172,9 +172,9 @@ mod nonstd_io {
     /// The error type for I/O operations of the [`Read`], [`Write`], [`Seek`], and
     /// associated traits.
     ///
-    /// [`Read`]: super::Read
-    /// [`Write`]: super::Write
-    /// [`Seek`]: super::Seek
+    /// [`Read`]: Read
+    /// [`Write`]: Write
+    /// [`Seek`]: Seek
     pub struct Error {
         repr: Repr,
     }

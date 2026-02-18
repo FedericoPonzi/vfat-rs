@@ -69,7 +69,13 @@ impl Directory {
     /// Returns true if an entry called "name" is contained in this directory
     ///
     pub fn contains(&self, name: &str) -> error::Result<bool> {
-        for entry in self.contents()? {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.read();
+        self.contains_unlocked(name)
+    }
+
+    pub(crate) fn contains_unlocked(&self, name: &str) -> error::Result<bool> {
+        for entry in self.contents_unlocked()? {
             if entry.name() == name {
                 return Ok(true);
             }
@@ -79,12 +85,16 @@ impl Directory {
     /// Create a new file in this directory
     ///
     pub fn create_file(&mut self, name: String) -> error::Result<File> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.write();
         Ok(self.create(name, EntryType::File)?.into_file_unchecked())
     }
 
     /// Create a new directory in this directory
     ///
     pub fn create_directory(&mut self, name: String) -> error::Result<Directory> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.write();
         Ok(self
             .create(name, EntryType::Directory)?
             .into_directory_unchecked())
@@ -98,7 +108,7 @@ impl Directory {
             name,
             self.metadata.name()
         );
-        if self.contains(&name)? {
+        if self.contains_unlocked(&name)? {
             return Err(error::VfatRsError::NameAlreadyInUse { target: name });
         }
 
@@ -225,7 +235,7 @@ impl Directory {
 
     /// Returns an entry from inside this directory.
     fn get_entry(&mut self, target_filename: &str) -> error::Result<DirectoryEntry> {
-        self.contents()?
+        self.contents_unlocked()?
             .into_iter()
             .find(|name| {
                 debug!(
@@ -241,6 +251,12 @@ impl Directory {
     }
 
     pub fn delete(&mut self, target_name: String) -> error::Result<()> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.write();
+        self.delete_unlocked(target_name)
+    }
+
+    fn delete_unlocked(&mut self, target_name: String) -> error::Result<()> {
         info!("Starting delete routine for entry: '{}'. ", target_name);
 
         const PSEUDO_CURRENT_FOLDER: &str = ".";
@@ -258,7 +274,7 @@ impl Directory {
 
         if target_entry.is_dir() {
             let directory = target_entry.into_directory_unchecked();
-            let contents = directory.contents()?;
+            let contents = directory.contents_unlocked()?;
             if contents.len() > PSEUDO_FOLDERS.len() {
                 return Err(error::VfatRsError::NonEmptyDirectory {
                     target: directory.metadata.name().to_string(),
@@ -364,6 +380,12 @@ impl Directory {
     }
 
     pub fn contents(&self) -> error::Result<Vec<DirectoryEntry>> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.read();
+        self.contents_unlocked()
+    }
+
+    pub(crate) fn contents_unlocked(&self) -> error::Result<Vec<DirectoryEntry>> {
         info!("Directory contents, cluster: {:?}", self.metadata.cluster);
 
         let entries = self.contents_direntry()?;
@@ -450,6 +472,12 @@ impl Directory {
     }
 
     pub fn rename(&mut self, target_name: String, destination_path: crate::PathBuf) -> error::Result<()> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.write();
+        self.rename_unlocked(target_name, destination_path)
+    }
+
+    fn rename_unlocked(&mut self, target_name: String, destination_path: crate::PathBuf) -> error::Result<()> {
         let dest_str = destination_path.display().to_string();
         let dest_trimmed = dest_str.trim_end_matches('/');
 
@@ -498,12 +526,12 @@ impl Directory {
         // Resolve destination directory
         let dest_dir_entry = self
             .vfat_filesystem
-            .get_from_absolute_path(dest_parent.clone())?;
+            .get_from_absolute_path_unlocked(dest_parent.clone())?;
         let mut dest_dir = dest_dir_entry.into_directory_or_not_found()?;
 
         // POSIX semantics: if destination name already exists, delete it
-        if dest_dir.contains(&new_name)? {
-            dest_dir.delete(new_name.clone())?;
+        if dest_dir.contains_unlocked(&new_name)? {
+            dest_dir.delete_unlocked(new_name.clone())?;
         }
 
         // Write new entries in the destination directory

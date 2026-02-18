@@ -5,6 +5,7 @@ use binrw::io::Cursor;
 use binrw::BinReaderExt;
 use log::{debug, info, trace};
 use snafu::ensure;
+use spin::rwlock::RwLock;
 
 use crate::alloc::string::ToString;
 use crate::cluster::{cluster_reader, cluster_writer};
@@ -28,6 +29,16 @@ const MAX_CLUSTER_CHAIN_LENGTH: u32 = 1_048_576;
 /// Main entry point for your VFAT filesystem.
 ///
 /// Every file and directory object will keep a copy of this struct.
+///
+/// ## Thread Safety
+///
+/// `VfatFS` uses an internal `RwLock` to synchronize access. Read operations
+/// (listing directories, reading files) can proceed concurrently. Write
+/// operations (creating/deleting files, writing data) are serialized.
+///
+/// Individual [`File`](crate::api::File) objects are **not** `Sync` — do not
+/// share a single `File` across threads. Instead, open the file independently
+/// from each thread.
 #[derive(Clone)]
 pub struct VfatFS {
     // we need arc around device, because _maybe_ something might need to `Send` this device or Vfat
@@ -43,6 +54,9 @@ pub struct VfatFS {
     pub(crate) eoc_marker: FatEntry,
     // heap allocated to mostly to ease api
     pub(crate) time_manager: Arc<dyn TimeManagerTrait>,
+    /// Filesystem-wide lock: read operations take a shared (read) lock,
+    /// write/mutating operations take an exclusive (write) lock.
+    pub(crate) fs_lock: Arc<RwLock<()>>,
 }
 
 impl fmt::Debug for VfatFS {
@@ -187,6 +201,7 @@ impl VfatFS {
             eoc_marker,
             sectors_per_fat,
             time_manager,
+            fs_lock: Arc::new(RwLock::new(())),
         })
     }
 
@@ -315,6 +330,17 @@ impl VfatFS {
     /// ## Safety:
     /// absolute_path should start with `/`.
     pub fn get_from_absolute_path(&mut self, absolute_path: PathBuf) -> Result<DirectoryEntry> {
+        let lock = self.fs_lock.clone();
+        let _guard = lock.read();
+        self.get_from_absolute_path_unlocked(absolute_path)
+    }
+
+    /// Internal path resolution without acquiring the lock (for use by callers
+    /// that already hold the lock).
+    pub(crate) fn get_from_absolute_path_unlocked(
+        &mut self,
+        absolute_path: PathBuf,
+    ) -> Result<DirectoryEntry> {
         ensure!(
             absolute_path.is_absolute(),
             error::PathNotAbsoluteSnafu {
@@ -322,15 +348,15 @@ impl VfatFS {
             }
         );
         if absolute_path == PathBuf::from("/") {
-            return self.get_root().map(From::from);
+            return self.get_root_unlocked().map(From::from);
         }
         let mut path_iter = absolute_path.iter();
-        let mut current_entry = DirectoryEntry::from(self.get_root()?);
+        let mut current_entry = DirectoryEntry::from(self.get_root_unlocked()?);
         path_iter.next();
         for sub_path in path_iter {
             let directory = current_entry.into_directory_or_not_found()?;
             let matches: Option<DirectoryEntry> = directory
-                .contents()?
+                .contents_unlocked()?
                 .into_iter()
                 .filter(|entry| entry.metadata().name() == sub_path)
                 .last();
@@ -346,13 +372,21 @@ impl VfatFS {
     }
 
     pub fn path_exists(&mut self, path: PathBuf) -> Result<bool> {
-        let entry = self.get_from_absolute_path(path).map(|_| true);
+        let lock = self.fs_lock.clone();
+        let _guard = lock.read();
+        let entry = self.get_from_absolute_path_unlocked(path).map(|_| true);
         match entry {
             Err(VfatRsError::EntryNotFound { .. }) => Ok(false),
             x => x,
         }
     }
     pub fn get_root(&mut self) -> Result<Directory> {
+        let lock = self.fs_lock.clone();
+        let _guard = lock.read();
+        self.get_root_unlocked()
+    }
+
+    pub(crate) fn get_root_unlocked(&mut self) -> Result<Directory> {
         const UNKNOWN_ENTRIES: usize = 1;
         const BUF_SIZE: usize = UNKNOWN_ENTRIES * size_of::<UnknownDirectoryEntry>();
         let mut buf = [0; BUF_SIZE];
@@ -386,6 +420,7 @@ mod test {
     use alloc::format;
     use alloc::sync::Arc;
     use alloc::vec::Vec;
+    use spin::rwlock::RwLock;
 
     use crate::fat_table::FAT_ENTRY_SIZE;
     use crate::io::Write;
@@ -488,6 +523,7 @@ mod test {
             root_cluster: ClusterId::new(2),
             eoc_marker: Default::default(),
             time_manager: TimeManagerNoop::new_arc(),
+            fs_lock: Arc::new(RwLock::new(())),
         };
 
         // Attempt to traverse the circular chain - should return error, not hang
@@ -538,6 +574,7 @@ mod test {
             root_cluster: ClusterId::new(0),
             eoc_marker: Default::default(),
             time_manager: TimeManagerNoop::new_arc(),
+            fs_lock: Arc::new(RwLock::new(())),
         };
         assert_eq!(
             vfat.find_free_cluster().unwrap().unwrap(),

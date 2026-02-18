@@ -10,7 +10,7 @@ use crate::{error, SectorId};
 use core::fmt::Debug;
 
 /// An interface to the OS-owned timer. Needed for timestamping file creations and update.
-pub trait TimeManagerTrait: Debug {
+pub trait TimeManagerTrait: Debug + Send + Sync {
     /// Get the current Unix timestamp in milliseconds.
     /// The number of seconds since January 1, 1970, 00:00:00 UTC
     /// TODO negative dates? Should this be i64?

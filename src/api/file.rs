@@ -57,7 +57,7 @@ impl File {
     fn update_metadata(&mut self) -> Result<()> {
         debug!("Going to update metadata on disk...");
         self.vfat_filesystem
-            .get_from_absolute_path(self.metadata.parent().clone())?
+            .get_from_absolute_path_unlocked(self.metadata.parent().clone())?
             .into_directory_unchecked()
             .update_entry(self.metadata.clone())
     }
@@ -66,6 +66,12 @@ impl File {
     }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.write();
+        self.write_unlocked(buf)
+    }
+
+    fn write_unlocked(&mut self, buf: &[u8]) -> Result<usize> {
         if buf.is_empty() {
             return Ok(0);
         }
@@ -104,11 +110,15 @@ impl File {
     }
 
     pub fn flush(&mut self) -> Result<()> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.write();
         // TODO, should flush only data wrt this file..
         self.vfat_filesystem.device.flush()
     }
 
     pub fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.write();
         match pos {
             SeekFrom::Start(val) => {
                 self.offset = val as usize;
@@ -140,7 +150,13 @@ impl File {
         }
         Ok(self.offset as u64)
     }
-    pub fn read(&mut self, mut buf: &mut [u8]) -> Result<usize> {
+    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.read();
+        self.read_unlocked(buf)
+    }
+
+    fn read_unlocked(&mut self, mut buf: &mut [u8]) -> Result<usize> {
         // TODO: if cluster is deleted, it should fail.
         // it should read at most the buf size or the missing file data.
         let amount_to_read = cmp::min(buf.len(), self.metadata.size().saturating_sub(self.offset));

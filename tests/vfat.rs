@@ -734,3 +734,72 @@ fn test_cached_write_read_roundtrip() -> vfat_rs::Result<()> {
     assert_eq!(&buf, content);
     Ok(())
 }
+
+/// Test that concurrent threads can safely operate on the same VfatFS instance.
+/// Writers create files while readers list the root directory contents.
+#[test]
+fn test_concurrent_read_write() -> vfat_rs::Result<()> {
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+
+    let (mut vfat, _f) = init_vfat()?;
+
+    // Pre-create a file so readers always have something to list
+    let mut root = vfat.get_root()?;
+    let (seed_name, _) = random_name("seed");
+    let mut seed = root.create_file(seed_name)?;
+    seed.write_all(b"seed data")?;
+    seed.flush()?;
+
+    let num_writers = 3;
+    let num_readers = 3;
+    let total = num_writers + num_readers;
+    let barrier = Arc::new(Barrier::new(total));
+
+    let mut handles = Vec::new();
+
+    // Spawn writer threads — each creates a file
+    for i in 0..num_writers {
+        let mut vfat_clone = vfat.clone();
+        let barrier = barrier.clone();
+        handles.push(thread::spawn(move || {
+            barrier.wait(); // synchronize start
+            let mut root = vfat_clone.get_root().unwrap();
+            let name = format!("concurrent_w{}", i);
+            let mut file = root.create_file(name).unwrap();
+            let data = format!("data from writer {}", i);
+            file.write_all(data.as_bytes()).unwrap();
+            file.flush().unwrap();
+        }));
+    }
+
+    // Spawn reader threads — each lists root directory contents
+    for _ in 0..num_readers {
+        let mut vfat_clone = vfat.clone();
+        let barrier = barrier.clone();
+        handles.push(thread::spawn(move || {
+            barrier.wait(); // synchronize start
+            let root = vfat_clone.get_root().unwrap();
+            let entries = root.contents().unwrap();
+            // Should always find at least the seed file + pseudo dirs
+            assert!(entries.len() >= 2, "Expected at least 2 entries");
+        }));
+    }
+
+    for h in handles {
+        h.join().expect("Thread panicked");
+    }
+
+    // Verify all writer files exist
+    for i in 0..num_writers {
+        let name = format!("concurrent_w{}", i);
+        let path: PathBuf = format!("/{}", name).into();
+        assert!(
+            vfat.path_exists(path)?,
+            "File {} should exist after concurrent writes",
+            name
+        );
+    }
+
+    Ok(())
+}

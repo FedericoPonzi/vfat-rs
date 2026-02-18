@@ -46,6 +46,17 @@ fn init_vfat() -> vfat_rs::Result<(VfatFS, VfatFsRandomPath)> {
         .map(|fs| (fs, vfatfs_randompath))
 }
 
+fn init_vfat_cached(cache_capacity: usize) -> vfat_rs::Result<(VfatFS, VfatFsRandomPath)> {
+    let (dev, master_boot_record, vfatfs_randompath) = init();
+    VfatFS::new_with_cache(
+        dev,
+        master_boot_record.partitions[0].start_sector,
+        vfat_rs::TimeManagerNoop::new(),
+        cache_capacity,
+    )
+    .map(|fs| (fs, vfatfs_randompath))
+}
+
 /// Returns name and path
 fn random_name(prefix: &str) -> (String, String) {
     let mut rng = rand::rng();
@@ -698,5 +709,28 @@ fn test_disk_full() -> vfat_rs::Result<()> {
             .unwrap();
         println!("File's metadata: {:?}", as_file.metadata());
     }
+    Ok(())
+}
+
+#[test]
+fn test_cached_write_read_roundtrip() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = init_vfat_cached(64)?;
+    let mut root = vfat.get_root()?;
+
+    let (file_name, file_path) = random_name("cache_test");
+    let mut file = root.create_file(file_name)?;
+
+    let content = b"cached write test data 1234567890";
+    file.write_all(content)?;
+    file.flush()?;
+
+    // Re-read from filesystem
+    let mut file = vfat
+        .get_from_absolute_path(file_path.as_str().into())?
+        .into_file()
+        .unwrap();
+    let mut buf = vec![0u8; content.len()];
+    file.read(&mut buf)?;
+    assert_eq!(&buf, content);
     Ok(())
 }

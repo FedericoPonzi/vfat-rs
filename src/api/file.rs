@@ -171,7 +171,7 @@ impl File {
     }
 
     fn _sync(&mut self) -> Result<()> {
-        unimplemented!()
+        self.flush()
     }
 }
 

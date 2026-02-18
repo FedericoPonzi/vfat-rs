@@ -66,13 +66,26 @@ impl VfatFS {
 
     /// Create a new VFat filesystem using a custom time manager.
     pub fn new_tm<B: BlockDevice + Send + 'static>(
-        mut device: B,
+        device: B,
         partition_start_sector: u32,
         time_manager: impl TimeManagerTrait + 'static,
     ) -> Result<Self> {
+        Self::new_with_cache(device, partition_start_sector, time_manager, 0)
+    }
+
+    /// Create a new VFat filesystem with a custom time manager and sector cache.
+    ///
+    /// `cache_capacity` is the maximum number of sectors to cache in memory.
+    /// Use 0 to disable caching (all I/O goes directly to the device).
+    pub fn new_with_cache<B: BlockDevice + Send + 'static>(
+        mut device: B,
+        partition_start_sector: u32,
+        time_manager: impl TimeManagerTrait + 'static,
+        cache_capacity: usize,
+    ) -> Result<Self> {
         let time_manager = Arc::new(time_manager);
         let full_ebpb = Self::read_fullebpb(&mut device, partition_start_sector)?;
-        Self::new_with_ebpb(device, partition_start_sector, full_ebpb, time_manager)
+        Self::new_with_ebpb(device, partition_start_sector, full_ebpb, time_manager, cache_capacity)
     }
 
     /// Read the Full Extended BIOS Parameter block from the device.
@@ -142,6 +155,7 @@ impl VfatFS {
         partition_start_sector: u32,
         full_ebpb: FullExtendedBIOSParameterBlock,
         time_manager: Arc<dyn TimeManagerTrait>,
+        cache_capacity: usize,
     ) -> Result<Self> {
         Self::validate_bpb(&full_ebpb.bpb, &full_ebpb.extended)?;
         let fat_start_sector =
@@ -156,7 +170,7 @@ impl VfatFS {
         let sector_size = device.sector_size();
         let fat_amount = full_ebpb.bpb.fat_amount;
         let sectors_per_fat = full_ebpb.extended.sectors_per_fat;
-        let cached_partition = CachedPartition::new(
+        let cached_partition = CachedPartition::new_with_cache(
             device,
             sector_size,
             fat_start_sector,
@@ -164,6 +178,7 @@ impl VfatFS {
             data_start_sector,
             fat_amount,
             sectors_per_fat,
+            cache_capacity,
         );
         Ok(VfatFS {
             device: Arc::new(cached_partition),

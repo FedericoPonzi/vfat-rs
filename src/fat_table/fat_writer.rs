@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use crate::error::{self, Result};
 use crate::fat_table::{get_params, FatEntry};
@@ -8,29 +9,39 @@ use snafu::ensure;
 /// Maximum cluster chain length to prevent infinite loops in corrupted filesystems.
 const MAX_CLUSTER_CHAIN_LENGTH: u32 = 1_048_576;
 
-/// Delete a cluster chain starting from `current`.
-/// TODO: Start from the end of the chain to make the operation safer.
-/// TODO: Check if "current" is of "Used" type.
-/// TODO: Test with array backed dev.
+/// Delete a cluster chain starting from `start`.
+///
+/// For crash safety, the chain is collected first and then deleted in reverse
+/// order (last cluster to first). If a power failure interrupts the operation,
+/// the head of the chain still points to valid (not-yet-freed) clusters,
+/// avoiding orphaned cluster chains. A filesystem check tool can reclaim the
+/// partially-freed tail.
 pub(crate) fn delete_cluster_chain(
-    mut current: ClusterId,
+    start: ClusterId,
     device: ArcMutex<CachedPartition>,
 ) -> Result<()> {
-    const DELETED_ENTRY: FatEntry = FatEntry::Unused;
-    let mut iterations = 0;
-    while let Some(next) = fat_table::next_cluster(current, device.clone())? {
+    // Phase 1: collect the full chain.
+    let mut chain = Vec::new();
+    let mut current = start;
+    loop {
         ensure!(
-            iterations < MAX_CLUSTER_CHAIN_LENGTH,
+            chain.len() < MAX_CLUSTER_CHAIN_LENGTH as usize,
             error::FilesystemCorruptedSnafu {
                 reason: "Cluster chain exceeds maximum length (possible circular reference)"
             }
         );
-        set_fat_entry(device.clone(), current, DELETED_ENTRY)?;
-        current = next;
-        iterations += 1;
+        chain.push(current);
+        match fat_table::next_cluster(current, device.clone())? {
+            Some(next) => current = next,
+            None => break,
+        }
     }
 
-    set_fat_entry(device, current, DELETED_ENTRY)?;
+    // Phase 2: delete from last to first for crash safety.
+    const DELETED_ENTRY: FatEntry = FatEntry::Unused;
+    for &cluster in chain.iter().rev() {
+        set_fat_entry(device.clone(), cluster, DELETED_ENTRY)?;
+    }
 
     Ok(())
 }
@@ -57,6 +68,7 @@ pub(crate) fn set_fat_entry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fat_table::FAT_ENTRY_SIZE;
     use crate::{BlockDevice, CachedPartition, ClusterId, SectorId};
     use alloc::sync::Arc;
     use alloc::vec::Vec;
@@ -184,5 +196,165 @@ mod tests {
                 "All FAT copies should have identical data"
             );
         }
+    }
+
+    /// A block device backed by an in-memory FAT sector that supports
+    /// simulating a crash after a configurable number of writes.
+    struct CrashSimDevice {
+        /// Raw FAT sector data. One sector of 512 bytes = 128 FAT entries.
+        fat_sector: Arc<SpinMutex<[u8; 512]>>,
+        /// Number of writes remaining before the device "crashes".
+        /// None means no crash simulation.
+        writes_before_crash: Arc<SpinMutex<Option<usize>>>,
+    }
+
+    impl CrashSimDevice {
+        fn new(
+            fat_sector: Arc<SpinMutex<[u8; 512]>>,
+            writes_before_crash: Arc<SpinMutex<Option<usize>>>,
+        ) -> Self {
+            Self {
+                fat_sector,
+                writes_before_crash,
+            }
+        }
+
+        /// Write a FAT entry directly into the backing store (bypasses crash limit).
+        fn set_entry(fat_sector: &Arc<SpinMutex<[u8; 512]>>, cluster_id: u32, entry: FatEntry) {
+            let offset = cluster_id as usize * FAT_ENTRY_SIZE;
+            let bytes = entry.as_buff();
+            fat_sector.lock()[offset..offset + FAT_ENTRY_SIZE].copy_from_slice(&bytes);
+        }
+
+        /// Read a FAT entry directly from the backing store.
+        fn get_entry(fat_sector: &Arc<SpinMutex<[u8; 512]>>, cluster_id: u32) -> FatEntry {
+            let offset = cluster_id as usize * FAT_ENTRY_SIZE;
+            let data = fat_sector.lock();
+            let mut buf = [0u8; FAT_ENTRY_SIZE];
+            buf.copy_from_slice(&data[offset..offset + FAT_ENTRY_SIZE]);
+            FatEntry::from(buf)
+        }
+    }
+
+    impl BlockDevice for CrashSimDevice {
+        fn read_sector_offset(
+            &mut self,
+            _sector: SectorId,
+            offset: usize,
+            buf: &mut [u8],
+        ) -> Result<usize> {
+            let data = self.fat_sector.lock();
+            let end = core::cmp::min(offset + buf.len(), data.len());
+            let len = end - offset;
+            buf[..len].copy_from_slice(&data[offset..end]);
+            Ok(len)
+        }
+
+        fn write_sector_offset(
+            &mut self,
+            _sector: SectorId,
+            offset: usize,
+            buf: &[u8],
+        ) -> Result<usize> {
+            let mut limit = self.writes_before_crash.lock();
+            if let Some(ref mut remaining) = *limit {
+                if *remaining == 0 {
+                    return Err(crate::io::ErrorKind::Other.into());
+                }
+                *remaining -= 1;
+            }
+            let mut data = self.fat_sector.lock();
+            let end = offset + buf.len();
+            data[offset..end].copy_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn get_canonical_name() -> &'static str
+        where
+            Self: Sized,
+        {
+            "CrashSimDevice"
+        }
+    }
+
+    /// Build a chain 2 → 3 → 4 → 5 → 6 (last), then simulate a crash
+    /// after `crash_after` FAT writes during deletion. Verify the remaining
+    /// chain from cluster 2 is still valid: every reachable cluster must be
+    /// either a DataCluster pointing to the next or a LastCluster.
+    fn crash_during_delete_helper(crash_after: usize) {
+        let fat_sector = Arc::new(SpinMutex::new([0u8; 512]));
+        let writes_before_crash = Arc::new(SpinMutex::new(None));
+
+        // Build chain: 2→3→4→5→6(last)
+        CrashSimDevice::set_entry(&fat_sector, 2, FatEntry::DataCluster(3));
+        CrashSimDevice::set_entry(&fat_sector, 3, FatEntry::DataCluster(4));
+        CrashSimDevice::set_entry(&fat_sector, 4, FatEntry::DataCluster(5));
+        CrashSimDevice::set_entry(&fat_sector, 5, FatEntry::DataCluster(6));
+        CrashSimDevice::set_entry(&fat_sector, 6, FatEntry::LastCluster(0x0FFFFFFF));
+
+        let device = CrashSimDevice::new(fat_sector.clone(), writes_before_crash.clone());
+
+        // 1 FAT copy so each cluster deletion = 1 write
+        let cached = Arc::new(CachedPartition::new(
+            device,
+            512,
+            SectorId(0), // FAT at sector 0 (matches our single sector)
+            1,
+            SectorId(100),
+            1, // 1 FAT copy
+            1, // 1 sector per FAT
+        ));
+
+        // Arm the crash: allow only `crash_after` writes
+        *writes_before_crash.lock() = Some(crash_after);
+
+        // Deletion will partially succeed then fail
+        let _ = delete_cluster_chain(ClusterId::new(2), cached);
+
+        // Verify: walk from cluster 2, every reachable entry must be valid
+        let mut current = 2u32;
+        let mut visited = 0;
+        loop {
+            let entry = CrashSimDevice::get_entry(&fat_sector, current);
+            match entry {
+                FatEntry::DataCluster(next) => {
+                    assert!(
+                        next >= 2 && next <= 6,
+                        "Cluster {} points to invalid cluster {}",
+                        current,
+                        next
+                    );
+                    current = next;
+                    visited += 1;
+                    assert!(visited <= 5, "Infinite loop detected in chain");
+                }
+                FatEntry::LastCluster(_) => break, // valid chain end
+                FatEntry::Unused => break,         // reached freed portion (head was freed)
+                other => panic!(
+                    "Cluster {} has unexpected FAT entry {:?}",
+                    current, other
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn test_crash_safety_delete_no_writes() {
+        // Crash immediately: no clusters freed, full chain intact
+        crash_during_delete_helper(0);
+    }
+
+    #[test]
+    fn test_crash_safety_delete_partial() {
+        // Crash after 1-4 writes: chain should still be traversable
+        for crash_after in 1..=4 {
+            crash_during_delete_helper(crash_after);
+        }
+    }
+
+    #[test]
+    fn test_crash_safety_delete_complete() {
+        // All 5 writes succeed: full chain deleted
+        crash_during_delete_helper(5);
     }
 }

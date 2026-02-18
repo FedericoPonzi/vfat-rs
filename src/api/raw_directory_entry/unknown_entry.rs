@@ -2,7 +2,7 @@ use crate::api::raw_directory_entry::long_file_name_entry::LongFileNameEntry;
 use crate::api::raw_directory_entry::{
     Attributes, EntryId, RegularDirectoryEntry, VfatDirectoryEntry,
 };
-use crate::const_assert_size;
+use crate::{const_assert_eq, const_assert_size};
 use core::mem;
 
 #[derive(Debug, Clone, Copy)]
@@ -15,6 +15,17 @@ pub struct UnknownDirectoryEntry {
     __unused_after: [u8; 20],
 }
 const_assert_size!(UnknownDirectoryEntry, 32);
+
+// Compile-time assertions that all transmuted types have identical sizes.
+const_assert_eq!(
+    core::mem::size_of::<UnknownDirectoryEntry>(),
+    core::mem::size_of::<LongFileNameEntry>()
+);
+const_assert_eq!(
+    core::mem::size_of::<UnknownDirectoryEntry>(),
+    core::mem::size_of::<RegularDirectoryEntry>()
+);
+
 impl UnknownDirectoryEntry {
     /// Returns true if this entry is a Long File Name.
     pub(crate) fn is_lfn(&self) -> bool {

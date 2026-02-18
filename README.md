@@ -29,7 +29,7 @@ The exported apis are in the api module. The OS should provide:
 
 * An implementation for the `TimeManagerTrait`. This is used for timestamping file creation and update.
 * An implementation for the device trait. This is used to interact with the disk.
-* Alloc support. It is mostly used to allocate some vec and strings, it might be put behind a feature flag later on.
+* `alloc` support — the library relies on the `alloc` crate (but not `std`) for heap-allocated types; like Box, Arc and String.
 
 ## Run example
 

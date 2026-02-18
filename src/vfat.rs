@@ -10,7 +10,9 @@ use crate::alloc::string::ToString;
 use crate::cluster::{cluster_reader, cluster_writer};
 use crate::fat_table::FatEntry;
 use crate::fat_table::FAT_ENTRY_SIZE;
-use crate::formats::extended_bios_parameter_block::FullExtendedBIOSParameterBlock;
+use crate::formats::extended_bios_parameter_block::{
+    BiosParameterBlock, ExtendedBiosParameterBlock, FullExtendedBIOSParameterBlock,
+};
 use crate::{error, Result, VfatMetadataTrait};
 use crate::{
     fat_table, ArcMutex, Attributes, BlockDevice, CachedPartition, ClusterId, Directory,
@@ -83,6 +85,57 @@ impl VfatFS {
         Ok(Cursor::new(&buff).read_le()?)
     }
 
+    /// Validate the BPB fields to prevent panics or undefined behavior
+    /// from corrupt or malicious filesystem images.
+    fn validate_bpb(bpb: &BiosParameterBlock, ebpb: &ExtendedBiosParameterBlock) -> Result<()> {
+        ensure!(
+            ebpb.signature == EBPF_VFAT_MAGIC || ebpb.signature == EBPF_VFAT_MAGIC_ALT,
+            error::InvalidVfatSnafu {
+                target: ebpb.signature
+            }
+        );
+        let bytes_per_sector = bpb.bytes_per_sector;
+        ensure!(
+            bytes_per_sector >= 512
+                && bytes_per_sector <= 4096
+                && bytes_per_sector.is_power_of_two(),
+            error::FilesystemCorruptedSnafu {
+                reason: "bytes_per_sector must be 512, 1024, 2048, or 4096"
+            }
+        );
+        ensure!(
+            bpb.sectors_per_cluster > 0 && bpb.sectors_per_cluster.is_power_of_two(),
+            error::FilesystemCorruptedSnafu {
+                reason: "sectors_per_cluster must be a power of 2 and non-zero"
+            }
+        );
+        ensure!(
+            bpb.reserved_sectors > 0,
+            error::FilesystemCorruptedSnafu {
+                reason: "reserved_sectors must be non-zero"
+            }
+        );
+        ensure!(
+            bpb.fat_amount > 0,
+            error::FilesystemCorruptedSnafu {
+                reason: "fat_amount must be non-zero"
+            }
+        );
+        ensure!(
+            ebpb.sectors_per_fat > 0,
+            error::FilesystemCorruptedSnafu {
+                reason: "sectors_per_fat must be non-zero"
+            }
+        );
+        ensure!(
+            ebpb.root_cluster >= 2,
+            error::FilesystemCorruptedSnafu {
+                reason: "root_cluster must be >= 2"
+            }
+        );
+        Ok(())
+    }
+
     /// start_sector: Partition's start sector, or "Entry Offset Sector".
     fn new_with_ebpb<B: BlockDevice + Send + 'static>(
         mut device: B,
@@ -90,6 +143,7 @@ impl VfatFS {
         full_ebpb: FullExtendedBIOSParameterBlock,
         time_manager: Arc<dyn TimeManagerTrait>,
     ) -> Result<Self> {
+        Self::validate_bpb(&full_ebpb.bpb, &full_ebpb.extended)?;
         let fat_start_sector =
             (partition_start_sector + full_ebpb.bpb.reserved_sectors as u32).into();
         let fats_total_size = full_ebpb.extended.sectors_per_fat * full_ebpb.bpb.fat_amount as u32;
@@ -111,13 +165,6 @@ impl VfatFS {
             fat_amount,
             sectors_per_fat,
         );
-        if full_ebpb.extended.signature != EBPF_VFAT_MAGIC
-            && full_ebpb.extended.signature != EBPF_VFAT_MAGIC_ALT
-        {
-            return Err(VfatRsError::InvalidVfat {
-                target: full_ebpb.extended.signature,
-            });
-        }
         Ok(VfatFS {
             device: Arc::new(cached_partition),
             fat_start_sector,

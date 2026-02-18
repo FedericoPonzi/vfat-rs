@@ -496,30 +496,37 @@ impl Directory {
             })
     }
 
-    pub fn rename(&mut self, target_name: String, destination_path: crate::PathBuf) -> error::Result<()> {
+    pub fn rename(
+        &mut self,
+        target_name: String,
+        destination_path: crate::PathBuf,
+    ) -> error::Result<()> {
         let lock = self.vfat_filesystem.fs_lock.clone();
         let _guard = lock.write();
         self.rename_unlocked(target_name, destination_path)
     }
 
-    fn rename_unlocked(&mut self, target_name: String, destination_path: crate::PathBuf) -> error::Result<()> {
+    fn rename_unlocked(
+        &mut self,
+        target_name: String,
+        destination_path: crate::PathBuf,
+    ) -> error::Result<()> {
         let dest_str = destination_path.display().to_string();
         let dest_trimmed = dest_str.trim_end_matches('/');
 
         // Extract new name (last path component) and parent directory path
         let (dest_parent_str, new_name) = match dest_trimmed.rfind('/') {
             Some(0) => ("/".to_string(), dest_trimmed[1..].to_string()),
-            Some(pos) => (dest_trimmed[..pos].to_string(), dest_trimmed[pos + 1..].to_string()),
+            Some(pos) => (
+                dest_trimmed[..pos].to_string(),
+                dest_trimmed[pos + 1..].to_string(),
+            ),
             None => {
-                return Err(error::VfatRsError::FileNotFound {
-                    target: dest_str,
-                });
+                return Err(error::VfatRsError::FileNotFound { target: dest_str });
             }
         };
         if new_name.is_empty() {
-            return Err(error::VfatRsError::FileNotFound {
-                target: dest_str,
-            });
+            return Err(error::VfatRsError::FileNotFound { target: dest_str });
         }
         let dest_parent: crate::PathBuf = dest_parent_str.as_str().into();
 

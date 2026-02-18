@@ -330,10 +330,7 @@ mod tests {
                 }
                 FatEntry::LastCluster(_) => break, // valid chain end
                 FatEntry::Unused => break,         // reached freed portion (head was freed)
-                other => panic!(
-                    "Cluster {} has unexpected FAT entry {:?}",
-                    current, other
-                ),
+                other => panic!("Cluster {} has unexpected FAT entry {:?}", current, other),
             }
         }
     }

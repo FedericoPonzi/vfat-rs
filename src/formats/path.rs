@@ -43,7 +43,11 @@ impl PathBuf {
         match trimmed.rfind('/') {
             Some(pos) => {
                 let name = &trimmed[pos + 1..];
-                if name.is_empty() { None } else { Some(name) }
+                if name.is_empty() {
+                    None
+                } else {
+                    Some(name)
+                }
             }
             None => Some(trimmed),
         }

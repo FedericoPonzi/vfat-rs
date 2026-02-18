@@ -99,7 +99,13 @@ impl VfatFS {
     ) -> Result<Self> {
         let time_manager = Arc::new(time_manager);
         let full_ebpb = Self::read_fullebpb(&mut device, partition_start_sector)?;
-        Self::new_with_ebpb(device, partition_start_sector, full_ebpb, time_manager, cache_capacity)
+        Self::new_with_ebpb(
+            device,
+            partition_start_sector,
+            full_ebpb,
+            time_manager,
+            cache_capacity,
+        )
     }
 
     /// Read the Full Extended BIOS Parameter block from the device.

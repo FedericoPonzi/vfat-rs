@@ -148,10 +148,7 @@ impl CachedPartition {
     }
 
     /// Flush a single cache entry to the device (caller must hold both locks).
-    fn flush_entry(
-        device: &mut Box<dyn BlockDevice + Send>,
-        entry: &mut CacheEntry,
-    ) -> Result<()> {
+    fn flush_entry(device: &mut Box<dyn BlockDevice + Send>, entry: &mut CacheEntry) -> Result<()> {
         if entry.dirty {
             device.write_sector(entry.sector, &entry.data)?;
             entry.dirty = false;

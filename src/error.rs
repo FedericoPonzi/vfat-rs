@@ -32,7 +32,11 @@ pub enum VfatRsError {
     EntryNotFound { target: String },
     #[snafu(display("Cannot delete pseudo directory: '{}'", target))]
     CannotDeletePseudoDir { target: String },
-    #[snafu(display("Cannot move directory '{}' into its own subdirectory '{}'", source_path, destination_path))]
+    #[snafu(display(
+        "Cannot move directory '{}' into its own subdirectory '{}'",
+        source_path,
+        destination_path
+    ))]
     CircularMove {
         source_path: String,
         destination_path: String,

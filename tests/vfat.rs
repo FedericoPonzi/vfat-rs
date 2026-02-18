@@ -735,6 +735,131 @@ fn test_cached_write_read_roundtrip() -> vfat_rs::Result<()> {
     Ok(())
 }
 
+/// Create a tiny (1MB) FAT32 disk image for tests that need to fill a disk.
+fn setup_small_disk() -> (VfatFS, common::VfatFsRandomPath) {
+    use std::process::Command;
+
+    let random_dir = common::create_random_dir();
+    std::fs::create_dir(&random_dir).expect("create temp dir");
+
+    let dir_str = random_dir.display().to_string();
+
+    // Create a tiny FAT32 image: 1MB FAT partition + MBR wrapper
+    let script = format!(
+        r#"
+        set -e
+        cd "{dir}"
+        mkfs.fat -C -F32 -n "TESTVOL" fat32.fs.fat 1024
+        dd if=fat32.fs.fat of=fat32.fs conv=sparse obs=512 seek=2048
+        truncate -s "+1048576" fat32.fs
+        parted -s --align optimal fat32.fs mklabel msdos mkpart primary fat32 1MiB 100% set 1 boot on
+        rm -f fat32.fs.fat
+        "#,
+        dir = dir_str
+    );
+    let output = Command::new("bash")
+        .arg("-c")
+        .arg(&script)
+        .output()
+        .expect("failed to create small disk image");
+    assert!(
+        output.status.success(),
+        "Small disk setup failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let fs_path = random_dir.join("fat32.fs");
+    let vfatfs_rp = common::VfatFsRandomPath {
+        fs_path: fs_path.clone(),
+    };
+
+    let dev = FilebackedBlockDevice {
+        image: std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&fs_path)
+            .unwrap(),
+    };
+    let mut buf = [0; 512];
+    let mut dev2 = FilebackedBlockDevice {
+        image: std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&fs_path)
+            .unwrap(),
+    };
+    dev2.read_sector(SectorId(0), &mut buf).unwrap();
+    let mbr = MasterBootRecord::from(buf);
+
+    let vfat = VfatFS::new(dev, mbr.partitions[0].start_sector).unwrap();
+    (vfat, vfatfs_rp)
+}
+
+/// Test that the filesystem handles disk-full conditions gracefully.
+/// Uses a tiny 1MB disk so it fills up quickly.
+#[test]
+fn test_disk_full_graceful() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = setup_small_disk();
+    let mut root = vfat.get_root()?;
+
+    let mut disk_full = false;
+    let mut files_created = 0;
+
+    // Fill the tiny disk by creating small files until allocation fails
+    for i in 0..5000 {
+        let name = format!("fill{}.txt", i);
+        match root.create_file(name) {
+            Ok(mut f) => {
+                if let Err(_) = f.write(b"x") {
+                    disk_full = true;
+                    break;
+                }
+                files_created += 1;
+            }
+            Err(_) => {
+                disk_full = true;
+                break;
+            }
+        }
+    }
+
+    assert!(disk_full, "Expected disk to fill up");
+    assert!(files_created > 0, "Should have created at least one file");
+
+    // Verify the filesystem is still functional after disk-full error:
+
+    // 1. Listing root directory works
+    let entries = root.contents()?;
+    assert!(!entries.is_empty(), "Root should still have entries");
+
+    // 2. A previously created file is readable
+    let mut first_file = vfat
+        .get_from_absolute_path("/fill0.txt".into())?
+        .into_file()
+        .unwrap();
+    let mut buf = [0u8; 1];
+    let n = first_file.read(&mut buf)?;
+    assert_eq!(n, 1);
+    assert_eq!(buf[0], b'x');
+
+    // 3. Deleting a file works (frees space)
+    root.delete("fill0.txt".to_string())?;
+    assert!(!vfat.path_exists("/fill0.txt".into())?);
+
+    // 4. After freeing space, creating a new file works again
+    let mut recovered = root.create_file("recovered.txt".to_string())?;
+    recovered.write(b"ok")?;
+
+    let mut recovered = vfat
+        .get_from_absolute_path("/recovered.txt".into())?
+        .into_file()
+        .unwrap();
+    let mut rbuf = [0u8; 2];
+    recovered.read(&mut rbuf)?;
+    assert_eq!(&rbuf, b"ok");
+
+    Ok(())
+}
 /// Test that deleted directory entry slots are reused when creating new files.
 /// Uses `raw_entry_count()` to verify that the total number of raw slots
 /// (including deleted) does NOT grow after a delete+recreate cycle — proving

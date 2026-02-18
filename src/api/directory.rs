@@ -125,7 +125,7 @@ impl Directory {
         let first_empty_spot_offset = if let Some(spot) = self.last_entry_spot {
             spot
         } else {
-            self.find_first_empty_spot_offset()?
+            self.find_first_empty_spot_offset(entries_len)?
         };
 
         info!(
@@ -158,9 +158,8 @@ impl Directory {
             let buf = unknown_entry_convert_to_bytes_2(entries);
             cw.write(&buf)?;
         }
-        // finally, update entries:
-        self.last_entry_spot =
-            Some(first_empty_spot_offset + entries_len * size_of::<UnknownDirectoryEntry>());
+        // Invalidate cached spot so next operation re-scans for deleted entries
+        self.last_entry_spot = None;
 
         Ok(match entry_type {
             EntryType::Directory => {
@@ -170,30 +169,49 @@ impl Directory {
         })
     }
 
-    /// Searches for `spots_needed` in all the clusters allocated to this directory
-    /// it only searches for empty spots, it won't allow (for now? TODO) replacing deleted entries.
-    ///
-    /// Returns:
-    ///  usize = index of the first EndOfEntries
-    ///  bool = enough spots found, no allocation needed.
-    /// TODO: revert commit ddf3fb48a03abff9e8096db72b571efab8307263 or add suppport for reusing deleted entries.
-    /// that commit partially implemented this behavior.
-    fn find_first_empty_spot_offset(&self) -> error::Result<usize> {
+    /// Searches for a contiguous run of reusable slots (deleted 0xE5 or end-of-entries 0x00)
+    /// that can fit `slots_needed` entries. Returns the byte offset of the first slot in
+    /// the run. Falls back to end-of-entries / end-of-cluster if no deleted run is large enough.
+    fn find_first_empty_spot_offset(&self, slots_needed: usize) -> error::Result<usize> {
         let mut cluster_chain_reader = self.cluster_chain_reader();
         let mut buff = [0u8; BUF_SIZE];
         let mut offset = 0;
+        // Track the start and length of the current contiguous reusable run
+        let mut run_start: Option<usize> = None;
+        let mut run_len: usize = 0;
+
         while cluster_chain_reader.read(&mut buff)? > 0 {
             let unknown_entries: [UnknownDirectoryEntry; ENTRIES_AMOUNT] =
                 unknown_entry_convert_from_bytes_entries(buff);
             for entry in unknown_entries.iter() {
                 if entry.is_end_of_entries() {
+                    // End-of-entries: any accumulated run (or this position) works
+                    if let Some(start) = run_start {
+                        if run_len >= slots_needed {
+                            return Ok(start);
+                        }
+                    }
+                    // Fall back to end-of-entries position (original behavior)
                     return Ok(offset);
+                } else if entry.is_deleted() {
+                    if run_start.is_none() {
+                        run_start = Some(offset);
+                        run_len = 0;
+                    }
+                    run_len += 1;
+                    if run_len >= slots_needed {
+                        return Ok(run_start.unwrap());
+                    }
+                } else {
+                    // Live entry — reset the run
+                    run_start = None;
+                    run_len = 0;
                 }
                 offset += size_of::<UnknownDirectoryEntry>();
             }
             buff = [0u8; BUF_SIZE];
         }
-        // we navigated the full cluster, but it's fully used.
+        // Navigated the full cluster chain — append at the end
         Ok(offset)
     }
 
@@ -379,6 +397,13 @@ impl Directory {
         Ok(entries)
     }
 
+    /// Returns the total number of raw directory entry slots in use (regular,
+    /// LFN, and deleted — everything except end-of-entries markers).
+    /// Useful for verifying that deleted slots are being reclaimed.
+    pub fn raw_entry_count(&self) -> error::Result<usize> {
+        Ok(self.contents_direntry()?.len())
+    }
+
     pub fn contents(&self) -> error::Result<Vec<DirectoryEntry>> {
         let lock = self.vfat_filesystem.fs_lock.clone();
         let _guard = lock.read();
@@ -542,7 +567,7 @@ impl Directory {
         let first_empty_spot_offset = if let Some(spot) = dest_dir.last_entry_spot {
             spot
         } else {
-            dest_dir.find_first_empty_spot_offset()?
+            dest_dir.find_first_empty_spot_offset(entries_len)?
         };
         let mut ccw = dest_dir
             .vfat_filesystem
@@ -552,8 +577,7 @@ impl Directory {
             let entry: [u8; size_of::<UnknownDirectoryEntry>()] = unknown_entry.into();
             ccw.write(&entry)?;
         }
-        dest_dir.last_entry_spot =
-            Some(first_empty_spot_offset + entries_len * size_of::<UnknownDirectoryEntry>());
+        dest_dir.last_entry_spot = None;
 
         // Delete old entries from source directory
         self.delete_entry(target_name)?;
@@ -626,7 +650,7 @@ impl Directory {
         let first_empty_spot_offset = if let Some(spot) = self.last_entry_spot {
             spot
         } else {
-            self.find_first_empty_spot_offset()?
+            self.find_first_empty_spot_offset(entries_len)?
         };
         let mut ccw = self
             .vfat_filesystem
@@ -639,9 +663,8 @@ impl Directory {
         }
         metadata.name = new_name;
 
-        // finally, update entries:
-        self.last_entry_spot =
-            Some(first_empty_spot_offset + entries_len * size_of::<UnknownDirectoryEntry>());
+        // Invalidate cached spot so next operation re-scans for deleted entries
+        self.last_entry_spot = None;
         self.delete_entry(target_name)?;
         Ok(())
     }

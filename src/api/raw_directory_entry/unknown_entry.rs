@@ -35,6 +35,10 @@ impl UnknownDirectoryEntry {
         let vfat_entry = VfatDirectoryEntry::from(self);
         matches!(vfat_entry, VfatDirectoryEntry::EndOfEntries(_))
     }
+    pub fn is_deleted(&self) -> bool {
+        let vfat_entry = VfatDirectoryEntry::from(self);
+        matches!(vfat_entry, VfatDirectoryEntry::Deleted(_))
+    }
     pub fn last_entry(&self) -> bool {
         self.is_end_of_entries()
     }

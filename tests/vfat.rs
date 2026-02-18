@@ -735,6 +735,68 @@ fn test_cached_write_read_roundtrip() -> vfat_rs::Result<()> {
     Ok(())
 }
 
+/// Test that deleted directory entry slots are reused when creating new files.
+/// Uses `raw_entry_count()` to verify that the total number of raw slots
+/// (including deleted) does NOT grow after a delete+recreate cycle — proving
+/// that new entries occupy the deleted slots rather than appending.
+#[test]
+fn test_deleted_entry_reuse() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    // Work in a fresh subdirectory so we control all entries
+    let dir_name = "reuse_dir".to_string();
+    let mut subdir = root.create_directory(dir_name)?;
+
+    // Each short-named file uses 2 raw entry slots (1 LFN + 1 regular).
+    // "." and ".." use 2 raw slots total.
+    let file_count = 6;
+    for i in 0..file_count {
+        let name = format!("f{}.txt", i);
+        let mut f = subdir.create_file(name)?;
+        f.write_all(format!("data{}", i).as_bytes())?;
+        f.flush()?;
+    }
+
+    // Record raw entry count: pseudo dirs + file entries (LFN + regular each)
+    let raw_count_before = subdir.raw_entry_count()?;
+
+    // Delete all files — raw entries become 0xE5 (deleted), count stays same
+    for i in 0..file_count {
+        subdir.delete(format!("f{}.txt", i))?;
+    }
+    let raw_after_delete = subdir.raw_entry_count()?;
+    assert_eq!(
+        raw_after_delete, raw_count_before,
+        "Raw count should be unchanged after delete (entries marked 0xE5, not removed)"
+    );
+
+    // Recreate the same number of files — should reuse deleted slots
+    for i in 0..file_count {
+        let name = format!("g{}.txt", i);
+        let mut f = subdir.create_file(name)?;
+        f.write_all(format!("reused{}", i).as_bytes())?;
+        f.flush()?;
+    }
+
+    let raw_after_reuse = subdir.raw_entry_count()?;
+    assert_eq!(
+        raw_after_reuse, raw_count_before,
+        "Raw count should NOT grow — deleted slots were reused"
+    );
+
+    // Verify all recreated files are readable
+    for i in 0..file_count {
+        let path: PathBuf = format!("/reuse_dir/g{}.txt", i).into();
+        let mut file = vfat.get_from_absolute_path(path)?.into_file().unwrap();
+        let expected = format!("reused{}", i);
+        let mut buf = vec![0u8; expected.len()];
+        file.read(&mut buf)?;
+        assert_eq!(buf, expected.as_bytes());
+    }
+
+    Ok(())
+}
 /// Test that concurrent threads can safely operate on the same VfatFS instance.
 /// Writers create files while readers list the root directory contents.
 #[test]

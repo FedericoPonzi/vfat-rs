@@ -449,16 +449,140 @@ impl Directory {
             })
     }
 
-    pub fn rename(&mut self, target_name: String, new_name: String) -> error::Result<()> {
-        // TODO: ensure new_name doesn't exists. This is tricky because of TOCTOU
-        // it should acquire a lock on the fs. check and create.
-        // TODO: try to test file deletion and read after the delete. It looks like it works though it shouldn't.
+    pub fn rename(&mut self, target_name: String, destination_path: crate::PathBuf) -> error::Result<()> {
+        let dest_str = destination_path.display().to_string();
+        let dest_trimmed = dest_str.trim_end_matches('/');
+
+        // Extract new name (last path component) and parent directory path
+        let (dest_parent_str, new_name) = match dest_trimmed.rfind('/') {
+            Some(0) => ("/".to_string(), dest_trimmed[1..].to_string()),
+            Some(pos) => (dest_trimmed[..pos].to_string(), dest_trimmed[pos + 1..].to_string()),
+            None => {
+                return Err(error::VfatRsError::FileNotFound {
+                    target: dest_str,
+                });
+            }
+        };
+        if new_name.is_empty() {
+            return Err(error::VfatRsError::FileNotFound {
+                target: dest_str,
+            });
+        }
+        let dest_parent: crate::PathBuf = dest_parent_str.as_str().into();
 
         let target_entry = self.get_entry(&target_name)?;
-
         let mut metadata = target_entry.metadata;
-        self.inner_rename(target_name, new_name, &mut metadata)
+
+        // Determine if this is a same-directory rename or cross-directory move
+        let source_parent_path = self.metadata.full_path();
+        if dest_parent == *source_parent_path {
+            // Same directory: use existing in-place rename
+            return self.inner_rename(target_name, new_name, &mut metadata);
+        }
+
+        // Cross-directory move
+        // If moving a directory, guard against circular moves
+        if metadata.attributes.is_directory() {
+            let parent_str = source_parent_path.display().to_string();
+            let sep = if parent_str.ends_with('/') { "" } else { "/" };
+            let source_entry_path: crate::PathBuf =
+                alloc::format!("{}{}{}", parent_str, sep, target_name).into();
+            if destination_path.starts_with(&source_entry_path) {
+                return Err(error::VfatRsError::CircularMove {
+                    source_path: source_entry_path.display().to_string(),
+                    destination_path: dest_str,
+                });
+            }
+        }
+
+        // Resolve destination directory
+        let dest_dir_entry = self
+            .vfat_filesystem
+            .get_from_absolute_path(dest_parent.clone())?;
+        let mut dest_dir = dest_dir_entry.into_directory_or_not_found()?;
+
+        // POSIX semantics: if destination name already exists, delete it
+        if dest_dir.contains(&new_name)? {
+            dest_dir.delete(new_name.clone())?;
+        }
+
+        // Write new entries in the destination directory
+        let attributes = metadata.attributes;
+        let entries: Vec<UnknownDirectoryEntry> =
+            VfatDirectoryEntry::new_vfat_entry(new_name.as_str(), metadata.cluster, attributes);
+        let entries_len = entries.len();
+        let first_empty_spot_offset = if let Some(spot) = dest_dir.last_entry_spot {
+            spot
+        } else {
+            dest_dir.find_first_empty_spot_offset()?
+        };
+        let mut ccw = dest_dir
+            .vfat_filesystem
+            .cluster_chain_writer(dest_dir.metadata.cluster);
+        ccw.seek(first_empty_spot_offset)?;
+        for unknown_entry in entries.into_iter() {
+            let entry: [u8; size_of::<UnknownDirectoryEntry>()] = unknown_entry.into();
+            ccw.write(&entry)?;
+        }
+        dest_dir.last_entry_spot =
+            Some(first_empty_spot_offset + entries_len * size_of::<UnknownDirectoryEntry>());
+
+        // Delete old entries from source directory
+        self.delete_entry(target_name)?;
+
+        // For directory moves, update the ".." pseudo-entry to point to new parent
+        if metadata.attributes.is_directory() && !metadata.has_no_cluster_allocated() {
+            Self::update_dotdot_cluster(
+                &self.vfat_filesystem,
+                metadata.cluster,
+                dest_dir.metadata.cluster,
+            )?;
+        }
+
+        metadata.name = new_name;
+        Ok(())
     }
+
+    /// Update the ".." pseudo-entry inside a directory to point to a new parent cluster.
+    fn update_dotdot_cluster(
+        vfat: &VfatFS,
+        dir_cluster: ClusterId,
+        new_parent_cluster: ClusterId,
+    ) -> error::Result<()> {
+        // ".." is always the second entry (index 1)
+        let dotdot_index = 1;
+        let index_offset = size_of::<UnknownDirectoryEntry>() * dotdot_index;
+
+        // Read the existing ".." entry
+        let mut buf = [0u8; size_of::<UnknownDirectoryEntry>()];
+        let mut reader = vfat.cluster_chain_reader(dir_cluster);
+        // Skip the "." entry
+        let mut skip_buf = [0u8; size_of::<UnknownDirectoryEntry>()];
+        reader.read(&mut skip_buf)?;
+        reader.read(&mut buf)?;
+
+        let unknown = UnknownDirectoryEntry::from(buf);
+        let mut regular: RegularDirectoryEntry = unknown.into();
+
+        // Update cluster to new parent (root cluster 2 maps to 0 per FAT convention)
+        let new_parent = if new_parent_cluster == ClusterId::new(2) {
+            ClusterId::new(0)
+        } else {
+            new_parent_cluster
+        };
+        let (high, low) = new_parent.into_high_low();
+        regular.high_16bits = high;
+        regular.low_16bits = low;
+
+        // Write it back
+        let updated: UnknownDirectoryEntry = regular.into();
+        let write_buf: [u8; size_of::<UnknownDirectoryEntry>()] = updated.into();
+        let mut writer = vfat.cluster_chain_writer(dir_cluster);
+        writer.seek(index_offset)?;
+        writer.write(&write_buf)?;
+        Ok(())
+    }
+
     fn inner_rename(
         &mut self,
         target_name: String,

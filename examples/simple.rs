@@ -50,7 +50,7 @@ fn main() {
     file.read(&mut buf).unwrap();
     println!("The file contains: '{}'", String::from_utf8_lossy(&buf));
 
-    root.rename("my-file".to_string(), "my-file-renamed".to_string())
+    root.rename("my-file".to_string(), "/my-file-renamed".into())
         .unwrap();
 
     println!(

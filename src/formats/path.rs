@@ -22,6 +22,42 @@ impl PathBuf {
     pub fn is_absolute(&self) -> bool {
         self.0.starts_with('/')
     }
+    /// Returns the parent directory path, or None if this is the root.
+    pub fn parent(&self) -> Option<PathBuf> {
+        if self.0 == "/" {
+            return None;
+        }
+        let trimmed = self.0.trim_end_matches('/');
+        match trimmed.rfind('/') {
+            Some(0) => Some(PathBuf::from("/")),
+            Some(pos) => Some(PathBuf::from(&trimmed[..pos])),
+            None => None,
+        }
+    }
+    /// Returns the final component of the path.
+    pub fn file_name(&self) -> Option<&str> {
+        let trimmed = self.0.trim_end_matches('/');
+        if trimmed.is_empty() {
+            return None;
+        }
+        match trimmed.rfind('/') {
+            Some(pos) => {
+                let name = &trimmed[pos + 1..];
+                if name.is_empty() { None } else { Some(name) }
+            }
+            None => Some(trimmed),
+        }
+    }
+    /// Returns true if `self` starts with the given base path.
+    pub fn starts_with(&self, base: &PathBuf) -> bool {
+        let self_trimmed = self.0.trim_end_matches('/');
+        let base_trimmed = base.0.trim_end_matches('/');
+        if base_trimmed == "/" {
+            return self_trimmed.starts_with('/');
+        }
+        self_trimmed == base_trimmed
+            || self_trimmed.starts_with(&alloc::format!("{}/", base_trimmed))
+    }
 }
 impl core::fmt::Display for PathBuf {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

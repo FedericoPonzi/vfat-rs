@@ -511,7 +511,7 @@ fn test_rename(is_dir: bool) -> vfat_rs::Result<()> {
 
     let new_name = random_name("file_rename");
 
-    root.rename(file_name.into(), new_name.0.clone())?;
+    root.rename(file_name.into(), new_name.1.clone().into())?;
 
     assert!(vfat.path_exists(new_name.1.into())?);
     assert!(!vfat.path_exists(used_name_path.into())?);
@@ -534,6 +534,136 @@ fn test_delete_folder_non_empty() -> vfat_rs::Result<()> {
     folder.delete(subfolder_name.clone())?;
     root.delete(folder_name.to_string())?;
 
+    Ok(())
+}
+
+#[test]
+fn test_move_file_to_subdirectory() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    let (file_name, file_path) = random_name("mvfile");
+    let (dir_name, _dir_path) = random_name("mvdir");
+
+    let mut file = root.create_file(file_name.clone())?;
+    file.write_all(b"move test content")?;
+    root.create_directory(dir_name.clone())?;
+
+    let dest_path = format!("/{}/{}", dir_name, file_name);
+    root.rename(file_name.clone(), dest_path.clone().into())?;
+
+    assert!(!vfat.path_exists(file_path.into())?);
+    assert!(vfat.path_exists(dest_path.into())?);
+    Ok(())
+}
+
+#[test]
+fn test_move_file_from_subdirectory_to_root() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    let (dir_name, _dir_path) = random_name("srcdir");
+    let (file_name, _) = random_name("mvback");
+
+    let mut dir = root.create_directory(dir_name.clone())?;
+    let mut file = dir.create_file(file_name.clone())?;
+    file.write_all(b"content to move back")?;
+
+    let src_path = format!("/{}/{}", dir_name, file_name);
+    let dest_path = format!("/{}", file_name);
+
+    assert!(vfat.path_exists(src_path.clone().into())?);
+    dir.rename(file_name.clone(), dest_path.clone().into())?;
+
+    assert!(!vfat.path_exists(src_path.into())?);
+    assert!(vfat.path_exists(dest_path.into())?);
+    Ok(())
+}
+
+#[test]
+fn test_move_directory_across_directories() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    let (src_dir_name, _) = random_name("srcd");
+    let (dest_dir_name, _) = random_name("dstd");
+    let (child_dir_name, _) = random_name("child");
+
+    let mut src_dir = root.create_directory(src_dir_name.clone())?;
+    src_dir.create_directory(child_dir_name.clone())?;
+    root.create_directory(dest_dir_name.clone())?;
+
+    let src_path = format!("/{}/{}", src_dir_name, child_dir_name);
+    let dest_path = format!("/{}/{}", dest_dir_name, child_dir_name);
+
+    src_dir.rename(child_dir_name.clone(), dest_path.clone().into())?;
+
+    assert!(!vfat.path_exists(src_path.into())?);
+    assert!(vfat.path_exists(dest_path.into())?);
+    Ok(())
+}
+
+#[test]
+fn test_move_and_rename() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    let (file_name, file_path) = random_name("orig");
+    let (dir_name, _) = random_name("tgtdir");
+    let (new_name, _) = random_name("renamed");
+
+    root.create_file(file_name.clone())?;
+    root.create_directory(dir_name.clone())?;
+
+    let dest_path = format!("/{}/{}", dir_name, new_name);
+    root.rename(file_name.clone(), dest_path.clone().into())?;
+
+    assert!(!vfat.path_exists(file_path.into())?);
+    assert!(vfat.path_exists(dest_path.into())?);
+    Ok(())
+}
+
+#[test]
+fn test_circular_move_prevented() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    let (parent_name, _) = random_name("parent");
+    let (child_name, _) = random_name("child");
+
+    let mut parent = root.create_directory(parent_name.clone())?;
+    parent.create_directory(child_name.clone())?;
+
+    // Try to move parent into its own child — should fail
+    let dest_path = format!("/{}/{}/{}", parent_name, child_name, parent_name);
+    let result = root.rename(parent_name.clone(), dest_path.into());
+    assert!(result.is_err());
+
+    // Parent should still exist
+    assert!(vfat.path_exists(format!("/{}", parent_name).into())?);
+    Ok(())
+}
+
+#[test]
+fn test_move_overwrite_existing() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    let (dir_name, _) = random_name("ovwdir");
+    let (file1_name, _) = random_name("file1");
+
+    let mut dir = root.create_directory(dir_name.clone())?;
+    // Create file2 in subdirectory (the one that will be overwritten)
+    dir.create_file(file1_name.clone())?;
+    // Create file1 in root (the one that will be moved)
+    root.create_file(file1_name.clone())?;
+
+    let dest_path = format!("/{}/{}", dir_name, file1_name);
+    // Move root/file1 to dir/file1, overwriting the existing one
+    root.rename(file1_name.clone(), dest_path.clone().into())?;
+
+    assert!(!vfat.path_exists(format!("/{}", file1_name).into())?);
+    assert!(vfat.path_exists(dest_path.into())?);
     Ok(())
 }
 

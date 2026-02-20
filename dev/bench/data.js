@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771582058530,
+  "lastUpdate": 1771586206376,
   "repoUrl": "https://github.com/FedericoPonzi/vfat-rs",
   "entries": {
     "Benchmark": [
@@ -293,6 +293,156 @@ window.BENCHMARK_DATA = {
             "name": "path_traversal_deep/cached",
             "value": 9780,
             "range": "± 631",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "me@fponzi.me",
+            "name": "Federico Ponzi",
+            "username": "FedericoPonzi"
+          },
+          "committer": {
+            "email": "me@fponzi.me",
+            "name": "Federico Ponzi",
+            "username": "FedericoPonzi"
+          },
+          "distinct": true,
+          "id": "cca13ac2e5a24824cff63a2acad8835239e592dc",
+          "message": "Add support for FSI_Nxt_Free\n\nThis helps speeding up allocations. From fat docuementation: https://www.cs.fsu.edu/~cop4610t/assignments/project3/spec/fatspec.pdf\n\nThis is a hint for the FAT driver. It indicates the cluster number at\nwhich the driver should start looking for free clusters. Because a\nFAT32 FAT is large, it can be rather time consuming if there are a\nlot of allocated clusters at the start of the FAT and the driver starts\nlooking for a free cluster starting at cluster 2. Typically this value is\nset to the last cluster number that the driver allocated. If the value is\n0xFFFFFFFF, then there is no hint and the driver should start\nlooking at cluster 2. Any other value can be used, but should be\nchecked first to make sure it is a valid cluster number for the\nvolume.",
+          "timestamp": "2026-02-20T08:55:00Z",
+          "tree_id": "06eae10afa3c262f1d4752753c1f9c91d74cc37d",
+          "url": "https://github.com/FedericoPonzi/vfat-rs/commit/cca13ac2e5a24824cff63a2acad8835239e592dc"
+        },
+        "date": 1771586205938,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "dir_create_file/uncached",
+            "value": 161066,
+            "range": "± 78190",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_create_file/cached",
+            "value": 94793,
+            "range": "± 63315",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_create_directory/uncached",
+            "value": 169825,
+            "range": "± 78772",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_create_directory/cached",
+            "value": 94363,
+            "range": "± 63291",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_list_contents/uncached",
+            "value": 25758,
+            "range": "± 699",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_list_contents/cached",
+            "value": 14412,
+            "range": "± 298",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_delete_file/uncached",
+            "value": 35731,
+            "range": "± 1387",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_delete_file/cached",
+            "value": 12404,
+            "range": "± 697",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_contains/uncached",
+            "value": 7676,
+            "range": "± 574",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_contains/cached",
+            "value": 3533,
+            "range": "± 116",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_rename/uncached",
+            "value": 31809,
+            "range": "± 1204",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_rename/cached",
+            "value": 7738,
+            "range": "± 309",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fat_chain_traversal/uncached",
+            "value": 1127296,
+            "range": "± 41921",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fat_chain_traversal/cached",
+            "value": 755908,
+            "range": "± 49330",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cluster_allocation/uncached",
+            "value": 1678552,
+            "range": "± 80923",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cluster_allocation/cached",
+            "value": 637393,
+            "range": "± 180501",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/uncached/small_16B",
+            "value": 338685,
+            "range": "± 158800",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/cached/small_16B",
+            "value": 211544,
+            "range": "± 126804",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/uncached/medium_4KB",
+            "value": 431686,
+            "range": "± 156928",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/cached/medium_4KB",
+            "value": 207578,
+            "range": "± 119577",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/uncached/large_256KB",
+            "value": 6205613,
+            "range": "± 68765",
             "unit": "ns/iter"
           }
         ]

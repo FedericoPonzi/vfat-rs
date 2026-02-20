@@ -12,9 +12,8 @@ It supports all the basic operations:
 * File reading and writing,
 * Directory and file deletion.
 
-It needs better support for reusing deleted space. Deletion updates the entry's metadata in the directory and marks it
-as deleted,
-but it's never garbage collected (this would be done by a defrag tool) nor reused.
+It needs better support for defragmentation — deleted clusters and directory entry slots are reused, but there is no
+defragmentation tool to consolidate free space.
 
 Check the issues for missing features.
 

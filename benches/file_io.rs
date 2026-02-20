@@ -11,7 +11,7 @@ const MEDIUM_SIZE: usize = 4 * 1024;
 const LARGE_SIZE: usize = 256 * 1024;
 
 fn bench_file_write(c: &mut Criterion) {
-    let bench_fs = BenchFs::new();
+    let bench_fs = BenchFs::new_with_size(Some(200));
     let mut group = c.benchmark_group("file_write");
     group.sample_size(10);
 

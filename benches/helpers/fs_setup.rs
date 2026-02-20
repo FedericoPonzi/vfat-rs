@@ -20,7 +20,11 @@ pub struct BenchFs {
 
 impl BenchFs {
     pub fn new() -> Self {
-        let setup = setup::setup();
+        Self::new_with_size(None)
+    }
+
+    pub fn new_with_size(size_mb: Option<u32>) -> Self {
+        let setup = setup::setup_with_size(size_mb);
         let source_path = setup.fs_path.clone();
         Self {
             _setup: setup,

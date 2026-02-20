@@ -30,13 +30,17 @@ impl Drop for VfatFsRandomPath {
 }
 
 pub fn setup() -> VfatFsRandomPath {
+    setup_with_size(None)
+}
+
+pub fn setup_with_size(size_mb: Option<u32>) -> VfatFsRandomPath {
     let mut random_dir_path = create_random_dir();
     if random_dir_path.exists() {
         println!(
             "Ops! Random dir '{:?}' already exists. Trying again.",
             random_dir_path.display()
         );
-        return setup();
+        return setup_with_size(size_mb);
     }
     match fs::create_dir(&random_dir_path) {
         Ok(_) => println!("Random directory created: {:?}", random_dir_path),
@@ -48,11 +52,13 @@ pub fn setup() -> VfatFsRandomPath {
     }
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     d.push("tests/setup.sh");
-    let _output = Command::new("bash")
-        .arg(d.display().to_string().as_str())
-        .arg(random_dir_path.display().to_string().as_str())
-        .output()
-        .expect("failed to execute setup script.");
+    let mut cmd = Command::new("bash");
+    cmd.arg(d.display().to_string().as_str())
+        .arg(random_dir_path.display().to_string().as_str());
+    if let Some(mb) = size_mb {
+        cmd.arg(mb.to_string());
+    }
+    let _output = cmd.output().expect("failed to execute setup script.");
 
     random_dir_path.push("fat32.fs");
 

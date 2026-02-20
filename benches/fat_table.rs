@@ -51,7 +51,7 @@ fn bench_fat_chain_traversal(c: &mut Criterion) {
 }
 
 fn bench_cluster_allocation(c: &mut Criterion) {
-    let bench_fs = BenchFs::new();
+    let bench_fs = BenchFs::new_with_size(Some(200));
     let mut group = c.benchmark_group("cluster_allocation");
     group.sample_size(10);
     let data = vec![0xBBu8; 64 * 1024]; // 64KB forces several cluster allocations

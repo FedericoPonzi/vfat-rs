@@ -43,7 +43,7 @@ pub struct ExtendedBiosParameterBlock {
     _fat_version: u16,
     /// Cluster pointing to the root (`/`) directory
     pub root_cluster: u32,
-    _fsinfo_sector: u16,
+    pub(crate) fsinfo_sector: u16,
     _backup_boot_sector: u16,
     _reserved: [u8; 12],
     _drive_number: u8,

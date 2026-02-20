@@ -5,6 +5,7 @@ use binrw::io::Cursor;
 use binrw::BinReaderExt;
 use log::{debug, info, trace};
 use snafu::ensure;
+use spin::mutex::SpinMutex;
 use spin::rwlock::RwLock;
 
 use crate::alloc::string::ToString;
@@ -14,6 +15,7 @@ use crate::fat_table::FAT_ENTRY_SIZE;
 use crate::formats::extended_bios_parameter_block::{
     BiosParameterBlock, ExtendedBiosParameterBlock, FullExtendedBIOSParameterBlock,
 };
+use crate::formats::fsinfo::FSInfoSector;
 use crate::{error, Result, VfatMetadataTrait};
 use crate::{
     fat_table, ArcMutex, Attributes, BlockDevice, CachedPartition, ClusterId, Directory,
@@ -57,6 +59,11 @@ pub struct VfatFS {
     /// Filesystem-wide lock: read operations take a shared (read) lock,
     /// write/mutating operations take an exclusive (write) lock.
     pub(crate) fs_lock: Arc<RwLock<()>>,
+    /// Hint for the next free cluster search start position (from FSInfo sector).
+    /// Updated after each successful allocation to avoid re-scanning used clusters.
+    last_alloc_hint: Arc<SpinMutex<u32>>,
+    /// Sector number of the FSInfo sector (absolute), or `None` if not present.
+    fsinfo_sector: Option<SectorId>,
 }
 
 impl fmt::Debug for VfatFS {
@@ -190,6 +197,18 @@ impl VfatFS {
         let sector_size = device.sector_size();
         let fat_amount = full_ebpb.bpb.fat_amount;
         let sectors_per_fat = full_ebpb.extended.sectors_per_fat;
+
+        // Read the FSInfo sector to get the free-cluster allocation hint.
+        let raw_fsinfo_sector = full_ebpb.extended.fsinfo_sector;
+        let (alloc_hint, fsinfo_abs_sector) =
+            if raw_fsinfo_sector > 0 && raw_fsinfo_sector != 0xFFFF {
+                let abs_sector = SectorId::from(partition_start_sector + raw_fsinfo_sector as u32);
+                let hint = Self::read_fsinfo_hint(&mut device, abs_sector).unwrap_or(2);
+                (hint, Some(abs_sector))
+            } else {
+                (2, None)
+            };
+
         let cached_partition = CachedPartition::new_with_cache(
             device,
             sector_size,
@@ -208,7 +227,21 @@ impl VfatFS {
             sectors_per_fat,
             time_manager,
             fs_lock: Arc::new(RwLock::new(())),
+            last_alloc_hint: Arc::new(SpinMutex::new(alloc_hint)),
+            fsinfo_sector: fsinfo_abs_sector,
         })
+    }
+
+    /// Read the FSInfo sector and return the next-free cluster hint.
+    /// Returns `None` on any error or invalid signatures.
+    fn read_fsinfo_hint<B: BlockDevice>(device: &mut B, sector: SectorId) -> Option<u32> {
+        let mut buf = [0u8; 512];
+        device.read_sector(sector, &mut buf).ok()?;
+        let fsinfo: FSInfoSector = Cursor::new(&buf).read_le().ok()?;
+        if !fsinfo.is_valid() {
+            return None;
+        }
+        fsinfo.next_free_hint()
     }
 
     fn read_end_of_chain_marker<B>(device: &mut B, fat_start_sector: SectorId) -> Result<FatEntry>
@@ -229,30 +262,47 @@ impl VfatFS {
         FatEntry::LastCluster(self.eoc_marker.into())
     }
 
-    /// Find next free cluster
+    /// Find next free cluster, starting from the last-allocation hint.
+    ///
+    /// Scans from the hint to the end of the FAT, then wraps around from
+    /// sector 0 to the hint. This avoids re-scanning already-allocated
+    /// clusters at the beginning of the FAT.
     pub(crate) fn find_free_cluster(&self) -> Result<Option<ClusterId>> {
         info!("Starting find free cluster routine");
-        // TODO: assumes sectors size.
-        const ENTRIES_BUF_SIZE: usize = 512 / FAT_ENTRY_SIZE;
-        const BUF_SIZE: usize = FAT_ENTRY_SIZE * ENTRIES_BUF_SIZE;
-        // Iterate on each sector.
-        for i in 0..self.sectors_per_fat {
-            let mut buf = [0; BUF_SIZE];
-            info!("reading sector: {}/{}", i, self.sectors_per_fat);
-            self.device
-                .read_sector(self.fat_start_sector + i, &mut buf)?;
-            let mut fat_entries = [FatEntry::default(); ENTRIES_BUF_SIZE];
+        const ENTRIES_PER_SECTOR: usize = 512 / FAT_ENTRY_SIZE;
+        const BUF_SIZE: usize = FAT_ENTRY_SIZE * ENTRIES_PER_SECTOR;
 
-            for (i, bytes) in buf.chunks(4).enumerate() {
-                fat_entries[i] = FatEntry::new_ref(bytes);
-            }
+        let hint = *self.last_alloc_hint.lock();
+        let hint_sector = hint / ENTRIES_PER_SECTOR as u32;
+        let hint_offset = hint as usize % ENTRIES_PER_SECTOR;
 
-            for (id, fat_entry) in fat_entries.into_iter().enumerate() {
-                let cid = (ENTRIES_BUF_SIZE as u32 * i) + id as u32;
-                trace!("(cid: {:?}) Fat entry: {:?}", fat_entry, cid);
-                if let FatEntry::Unused = fat_entry {
-                    debug!("Found an unused cluster with id: {}", cid);
-                    return Ok(Some(ClusterId::new(cid)));
+        // Scan from hint_sector..end, then 0..hint_sector (wrap-around).
+        for pass in 0..2u32 {
+            let (start, end) = if pass == 0 {
+                (hint_sector, self.sectors_per_fat)
+            } else {
+                (0, core::cmp::min(hint_sector + 1, self.sectors_per_fat))
+            };
+
+            for i in start..end {
+                let mut buf = [0; BUF_SIZE];
+                self.device
+                    .read_sector(self.fat_start_sector + i, &mut buf)?;
+
+                let skip = if pass == 0 && i == hint_sector {
+                    hint_offset
+                } else {
+                    0
+                };
+
+                for (id, bytes) in buf.chunks(4).enumerate().skip(skip) {
+                    let entry = FatEntry::new_ref(bytes);
+                    let cid = ENTRIES_PER_SECTOR as u32 * i + id as u32;
+                    trace!("(cid: {:?}) Fat entry: {:?}", entry, cid);
+                    if let FatEntry::Unused = entry {
+                        debug!("Found an unused cluster with id: {}", cid);
+                        return Ok(Some(ClusterId::new(cid)));
+                    }
                 }
             }
         }
@@ -260,7 +310,8 @@ impl VfatFS {
     }
 
     /// Allocate a cluster for a new file.
-    /// First find an empty cluster. Then set this cluster id as LastCluster
+    /// First find an empty cluster. Then set this cluster id as LastCluster.
+    /// Updates the allocation hint so the next search starts after this cluster.
     pub(crate) fn allocate_cluster_new_entry(&self) -> Result<ClusterId> {
         let free_cluster_id = self
             .find_free_cluster()?
@@ -268,6 +319,10 @@ impl VfatFS {
         let entry = self.new_last_cluster_fat_entry();
         info!("Found free cluster: {}", free_cluster_id);
         self.write_entry_in_vfat_table(free_cluster_id, entry)?;
+
+        // Advance the hint past the just-allocated cluster.
+        *self.last_alloc_hint.lock() = u32::from(free_cluster_id) + 1;
+
         Ok(free_cluster_id)
     }
 
@@ -329,6 +384,24 @@ impl VfatFS {
     /// This will delete all the cluster chain starting from cluster_id.
     pub(crate) fn delete_fat_cluster_chain(&self, cluster_id: ClusterId) -> Result<()> {
         fat_table::delete_cluster_chain(cluster_id, self.device.clone())
+    }
+
+    /// Write the current allocation hint back to the FSInfo sector on disk.
+    ///
+    /// This is advisory — the hint speeds up the next mount but correctness
+    /// does not depend on it. Errors are silently ignored (best-effort).
+    pub fn flush_fsinfo(&self) {
+        let sector = match self.fsinfo_sector {
+            Some(s) => s,
+            None => return,
+        };
+        let hint = *self.last_alloc_hint.lock();
+        // Write nxt_free (offset 492 = 4 + 480 + 4 + 4 = 492 bytes into the sector).
+        let hint_bytes = hint.to_le_bytes();
+        let _ = self
+            .device
+            .clone()
+            .write_sector_offset(sector, 492, &hint_bytes);
     }
 
     /// Get a new DirectoryEntry from an absolute path.
@@ -426,6 +499,7 @@ mod test {
     use alloc::format;
     use alloc::sync::Arc;
     use alloc::vec::Vec;
+    use spin::mutex::SpinMutex;
     use spin::rwlock::RwLock;
 
     use crate::fat_table::FAT_ENTRY_SIZE;
@@ -530,6 +604,8 @@ mod test {
             eoc_marker: Default::default(),
             time_manager: TimeManagerNoop::new_arc(),
             fs_lock: Arc::new(RwLock::new(())),
+            last_alloc_hint: Arc::new(SpinMutex::new(2)),
+            fsinfo_sector: None,
         };
 
         // Attempt to traverse the circular chain - should return error, not hang
@@ -581,6 +657,8 @@ mod test {
             eoc_marker: Default::default(),
             time_manager: TimeManagerNoop::new_arc(),
             fs_lock: Arc::new(RwLock::new(())),
+            last_alloc_hint: Arc::new(SpinMutex::new(0)),
+            fsinfo_sector: None,
         };
         assert_eq!(
             vfat.find_free_cluster().unwrap().unwrap(),

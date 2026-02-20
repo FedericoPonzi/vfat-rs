@@ -60,6 +60,30 @@ On Github actions (CI) it just works because the user has passwordless sudo.
 
 Then all tests can be run with `cargo test`. Each test in vfat.rs will create and delete a vfat filesystem.
 
+## Benchmarks
+
+Benchmarks use [Criterion.rs](https://github.com/bheisler/criterion.rs) and require the `std` feature:
+
+```bash
+cargo bench --features std
+```
+
+This benchmarks file I/O (read/write/seek), directory operations (create/delete/list/rename), path traversal, and FAT table operations — each comparing cached (64-sector cache) vs. uncached modes.
+
+HTML reports are generated in `target/criterion/`. CI runs benchmarks automatically on pushes to `master` (not on PRs).
+
+### Results
+
+CI runs benchmarks on every push to `master` and publishes historical results with trend charts to [the benchmark dashboard](http://gh.fponzi.me/vfat-rs/dev/bench/) via [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark). If a benchmark regresses by more than 50%, an alert comment is created automatically.
+
+You can also run them locally:
+
+```bash
+cargo bench --features std
+```
+
+HTML reports are generated in `target/criterion/`.
+
 ### Some vfat related utilities
 
 You can check whether the file contains a valid MBR via `gdisk`:

@@ -121,10 +121,12 @@ impl Directory {
         let metadata = self.create_metadata_for_new_entry(name.as_str(), &entry_type)?;
 
         // 2. Based on the name, create one or more LFN and the Regular entry.
+        let existing_short_names = self.collect_short_names()?;
         let entries: Vec<UnknownDirectoryEntry> = VfatDirectoryEntry::new_vfat_entry(
             name.as_str(),
             metadata.cluster,
             Self::attributes_from_entry(&entry_type),
+            &existing_short_names,
         );
         let entries_len = entries.len();
         let first_empty_spot_offset = if let Some(spot) = self.last_entry_spot {
@@ -403,6 +405,21 @@ impl Directory {
         Ok(entries)
     }
 
+    /// Collect the 8.3 short names of all regular entries in this directory.
+    fn collect_short_names(&self) -> error::Result<Vec<[u8; 8]>> {
+        Ok(self
+            .contents_direntry()?
+            .into_iter()
+            .filter_map(|e| {
+                if let VfatDirectoryEntry::Regular(r) = e {
+                    Some(r.file_name)
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+
     /// Returns the total number of raw directory entry slots in use (regular,
     /// LFN, and deleted — everything except end-of-entries markers).
     /// Useful for verifying that deleted slots are being reclaimed.
@@ -576,8 +593,9 @@ impl Directory {
 
         // Write new entries in the destination directory
         let attributes = metadata.attributes;
+        let existing_short_names = dest_dir.collect_short_names()?;
         let entries: Vec<UnknownDirectoryEntry> =
-            VfatDirectoryEntry::new_vfat_entry(new_name.as_str(), metadata.cluster, attributes);
+            VfatDirectoryEntry::new_vfat_entry(new_name.as_str(), metadata.cluster, attributes, &existing_short_names);
         let entries_len = entries.len();
         let first_empty_spot_offset = if let Some(spot) = dest_dir.last_entry_spot {
             spot
@@ -659,8 +677,9 @@ impl Directory {
         // create lfn from existing file
         // delete old file
         let attributes = metadata.attributes;
+        let existing_short_names = self.collect_short_names()?;
         let entries: Vec<UnknownDirectoryEntry> =
-            VfatDirectoryEntry::new_vfat_entry(new_name.as_str(), metadata.cluster, attributes);
+            VfatDirectoryEntry::new_vfat_entry(new_name.as_str(), metadata.cluster, attributes, &existing_short_names);
         let entries_len = entries.len();
         let first_empty_spot_offset = if let Some(spot) = self.last_entry_spot {
             spot

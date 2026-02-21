@@ -151,7 +151,12 @@ impl VfatDirectoryEntry {
     // TODO: add some check for presence of another file called in the same way (I'm using always ~1).
     /// Derive the 8.3 short file name from a long name.
     pub fn regular_filename_from(name: &str) -> [u8; 8] {
-        // FIXME: return a result, and reject these filenames?
+        Self::regular_filename_from_with_tail(name, 1)
+    }
+
+    /// Derive the 8.3 short file name from a long name with a specific numeric tail.
+    /// The prefix shrinks as the tail grows: ~1 uses 3-char prefix, ~10 uses 2-char, etc.
+    pub fn regular_filename_from_with_tail(name: &str, tail: u32) -> [u8; 8] {
         let replace_invalid_dos_char = |ch| {
             const INVALID_CHARS: [char; 6] = ['+', ',', ';', '=', '[', ']'];
             if INVALID_CHARS.contains(&ch) {
@@ -161,19 +166,28 @@ impl VfatDirectoryEntry {
             }
         };
 
-        let regular_filename_substr: String = name
+        let tail_str = alloc::format!("~{}", tail);
+        let tail_bytes = tail_str.as_bytes();
+        let prefix_len = 8 - tail_bytes.len();
+
+        // Use only the base name (before the first dot), strip spaces and dots
+        let base_name = name.split('.').next().unwrap_or(name);
+        let regular_filename_substr: String = base_name
             .chars()
+            .filter(|&ch| ch != ' ' && ch != '.')
             .map(replace_invalid_dos_char)
             .flat_map(char::to_uppercase)
-            .take(3)
+            .take(prefix_len)
             .collect();
         let regular_filename_bytes = regular_filename_substr.as_bytes();
         let mut regular_filename: [u8; 8] = [PADDING_CHARACTER; 8];
-        regular_filename[0] = regular_filename_bytes[0];
-        regular_filename[1] = regular_filename_bytes[1];
-        regular_filename[2] = regular_filename_bytes[2];
-        regular_filename[3] = b'~';
-        regular_filename[4] = b'1';
+        for (i, &b) in regular_filename_bytes.iter().enumerate() {
+            regular_filename[i] = b;
+        }
+        let tail_start = regular_filename_bytes.len();
+        for (i, &b) in tail_bytes.iter().enumerate() {
+            regular_filename[tail_start + i] = b;
+        }
         regular_filename
     }
 
@@ -229,10 +243,17 @@ impl VfatDirectoryEntry {
         name: &str,
         cluster_id: ClusterId,
         attributes: Attributes,
+        existing_short_names: &[[u8; 8]],
     ) -> Vec<UnknownDirectoryEntry> {
-        // this can be used to populate a regular directory entry
-
-        let regular_filename = Self::regular_filename_from(name);
+        // Find a non-colliding short name by incrementing the tail number
+        let mut tail = 1u32;
+        let regular_filename = loop {
+            let candidate = Self::regular_filename_from_with_tail(name, tail);
+            if !existing_short_names.contains(&candidate) {
+                break candidate;
+            }
+            tail += 1;
+        };
         let regular_filename_ext = Self::get_regular_filename_ext(name);
         let checksum = Self::checksum(&regular_filename, &regular_filename_ext);
 
@@ -366,8 +387,9 @@ mod test {
             "4chars.ext",
             ClusterId::new(0),
             Attributes::new_directory(),
+            &[],
         );
-        let expected_regular_name = b"4CH~1   ";
+        let expected_regular_name = b"4CHARS~1";
         let expecte_ext = b"EXT";
         assert!(!given.is_empty());
 
@@ -398,6 +420,7 @@ mod test {
             name,
             ClusterId::new(0),
             Attributes::new_directory(),
+            &[],
         );
         given
             .clone()
@@ -444,5 +467,65 @@ mod test {
         VfatDirectoryEntry::from(given.remove(0))
             .into_regular()
             .unwrap();
+    }
+
+    #[test]
+    fn test_short_filename_with_tail() {
+        // ~1: prefix_len=6, base "4cs" (3 chars) → "4CS~1   "
+        assert_eq!(
+            VfatDirectoryEntry::regular_filename_from_with_tail("4cs....e", 1),
+            *b"4CS~1   "
+        );
+        // ~2: prefix_len=6, base "4cs" (3 chars) → "4CS~2   "
+        assert_eq!(
+            VfatDirectoryEntry::regular_filename_from_with_tail("4cs....e", 2),
+            *b"4CS~2   "
+        );
+        // ~10: prefix_len=5, base "4cs" (3 chars) → "4CS~10  "
+        assert_eq!(
+            VfatDirectoryEntry::regular_filename_from_with_tail("4cs....e", 10),
+            *b"4CS~10  "
+        );
+        // ~100: prefix_len=4, base "longname" (8 chars, take 4) → "LONG~100"
+        assert_eq!(
+            VfatDirectoryEntry::regular_filename_from_with_tail("longname.txt", 100),
+            *b"LONG~100"
+        );
+    }
+
+    #[test]
+    fn test_new_vfat_entry_avoids_collision() {
+        init();
+        // "4chars.ext" base is "4chars" → "4CHARS~1". Simulate that as existing.
+        let existing = vec![*b"4CHARS~1"];
+        let entries = VfatDirectoryEntry::new_vfat_entry(
+            "4chars.ext",
+            ClusterId::new(0),
+            Attributes::new_directory(),
+            &existing,
+        );
+        // The regular entry should use ~2 instead of ~1
+        let regular: RegularDirectoryEntry =
+            VfatDirectoryEntry::from(entries.last().unwrap())
+                .into_regular()
+                .unwrap();
+        assert_eq!(&regular.file_name, b"4CHARS~2");
+    }
+
+    #[test]
+    fn test_new_vfat_entry_no_collision() {
+        init();
+        // No existing entries — should use ~1
+        let entries = VfatDirectoryEntry::new_vfat_entry(
+            "4chars.ext",
+            ClusterId::new(0),
+            Attributes::new_directory(),
+            &[],
+        );
+        let regular: RegularDirectoryEntry =
+            VfatDirectoryEntry::from(entries.last().unwrap())
+                .into_regular()
+                .unwrap();
+        assert_eq!(&regular.file_name, b"4CHARS~1");
     }
 }

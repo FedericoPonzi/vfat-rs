@@ -83,6 +83,11 @@ impl PartialEq<&str> for &PathBuf {
         *other == self.0.as_str()
     }
 }
+impl PartialEq<&str> for PathBuf {
+    fn eq(&self, other: &&str) -> bool {
+        *other == self.0.as_str()
+    }
+}
 
 impl From<&str> for PathBuf {
     fn from(s: &str) -> Self {

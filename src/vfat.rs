@@ -136,9 +136,7 @@ impl VfatFS {
         );
         let bytes_per_sector = bpb.bytes_per_sector;
         ensure!(
-            bytes_per_sector >= 512
-                && bytes_per_sector <= 4096
-                && bytes_per_sector.is_power_of_two(),
+            (512..=4096).contains(&bytes_per_sector) && bytes_per_sector.is_power_of_two(),
             error::FilesystemCorruptedSnafu {
                 reason: "bytes_per_sector must be 512, 1024, 2048, or 4096"
             }
@@ -426,7 +424,7 @@ impl VfatFS {
                 target: absolute_path.display().to_string()
             }
         );
-        if absolute_path == PathBuf::from("/") {
+        if absolute_path.iter().count() == 1 {
             return self.get_root_unlocked().map(From::from);
         }
         let mut path_iter = absolute_path.iter();

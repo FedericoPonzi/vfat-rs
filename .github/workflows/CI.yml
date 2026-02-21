@@ -32,9 +32,35 @@ jobs:
           args: --all -- --check
 
 
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        features: [ default, std ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
+          profile: minimal
+          override: true
+
+      - name: cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --features ${{ matrix.features }} -- -D warnings
+
+
   test:
     name: Test
-    needs: [ style ]
+    needs: [ style, clippy ]
     runs-on: ubuntu-latest
 
     strategy:

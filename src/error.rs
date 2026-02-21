@@ -128,10 +128,9 @@ impl From<VfatRsError> for binrw::io::Error {
 
 impl From<binrw::Error> for VfatRsError {
     fn from(err: binrw::Error) -> Self {
-        let kind = crate::io::ErrorKind::Other;
         match err {
-            binrw::Error::Io(_err) => Self::from(IoError::new(kind, "IoError")),
-            _ => Self::from(IoError::new(kind, "binrw error")),
+            binrw::Error::Io(_err) => Self::from(IoError::other("IoError")),
+            _ => Self::from(IoError::other("binrw error")),
         }
     }
 }

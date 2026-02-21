@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771705686578,
+  "lastUpdate": 1771705800709,
   "repoUrl": "https://github.com/FedericoPonzi/vfat-rs",
   "entries": {
     "Benchmark": [
@@ -2495,6 +2495,234 @@ window.BENCHMARK_DATA = {
             "name": "path_traversal_deep/cached",
             "value": 9764,
             "range": "± 621",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "me@fponzi.me",
+            "name": "Federico Ponzi",
+            "username": "FedericoPonzi"
+          },
+          "committer": {
+            "email": "me@fponzi.me",
+            "name": "Federico Ponzi",
+            "username": "FedericoPonzi"
+          },
+          "distinct": true,
+          "id": "8c6518c7544e70914395a21fc8c41bdeed797db7",
+          "message": "fix: reject file names exceeding 255-char LFN limit",
+          "timestamp": "2026-02-21T20:21:29Z",
+          "tree_id": "1e3070a89d1d8d550be574969e5af794da762520",
+          "url": "https://github.com/FedericoPonzi/vfat-rs/commit/8c6518c7544e70914395a21fc8c41bdeed797db7"
+        },
+        "date": 1771705800345,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "dir_create_file/uncached",
+            "value": 166601,
+            "range": "± 85398",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_create_file/cached",
+            "value": 84199,
+            "range": "± 42960",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_create_directory/uncached",
+            "value": 302057,
+            "range": "± 151584",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_create_directory/cached",
+            "value": 82016,
+            "range": "± 43129",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_list_contents/uncached",
+            "value": 23135,
+            "range": "± 963",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_list_contents/cached",
+            "value": 14021,
+            "range": "± 620",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_delete_file/uncached",
+            "value": 32831,
+            "range": "± 1551",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_delete_file/cached",
+            "value": 13122,
+            "range": "± 654",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_contains/uncached",
+            "value": 6591,
+            "range": "± 306",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_contains/cached",
+            "value": 3338,
+            "range": "± 106",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_rename/uncached",
+            "value": 32266,
+            "range": "± 2238",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "dir_rename/cached",
+            "value": 8637,
+            "range": "± 900",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fat_chain_traversal/uncached",
+            "value": 920190,
+            "range": "± 31779",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fat_chain_traversal/cached",
+            "value": 659713,
+            "range": "± 12164",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cluster_allocation/uncached",
+            "value": 1463852,
+            "range": "± 91760",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cluster_allocation/cached",
+            "value": 591123,
+            "range": "± 202023",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/uncached/small_16B",
+            "value": 341614,
+            "range": "± 150857",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/cached/small_16B",
+            "value": 200058,
+            "range": "± 109088",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/uncached/medium_4KB",
+            "value": 407059,
+            "range": "± 146214",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/cached/medium_4KB",
+            "value": 191488,
+            "range": "± 95485",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/uncached/large_256KB",
+            "value": 5076119,
+            "range": "± 56075",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_write/cached/large_256KB",
+            "value": 1678411,
+            "range": "± 49651",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_read/uncached/small_16B",
+            "value": 11259,
+            "range": "± 506",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_read/cached/small_16B",
+            "value": 4976,
+            "range": "± 182",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_read/uncached/medium_4KB",
+            "value": 25684,
+            "range": "± 1460",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_read/cached/medium_4KB",
+            "value": 5360,
+            "range": "± 345",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_read/uncached/large_256KB",
+            "value": 1049283,
+            "range": "± 40495",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_read/cached/large_256KB",
+            "value": 654611,
+            "range": "± 23527",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_seek/uncached",
+            "value": 259109,
+            "range": "± 9239",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_seek/cached",
+            "value": 10679,
+            "range": "± 302",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "path_traversal_shallow/uncached",
+            "value": 6580,
+            "range": "± 204",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "path_traversal_shallow/cached",
+            "value": 3845,
+            "range": "± 144",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "path_traversal_deep/uncached",
+            "value": 24308,
+            "range": "± 567",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "path_traversal_deep/cached",
+            "value": 9798,
+            "range": "± 262",
             "unit": "ns/iter"
           }
         ]

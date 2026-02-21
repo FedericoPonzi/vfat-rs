@@ -196,6 +196,39 @@ impl File {
     fn _sync(&mut self) -> Result<()> {
         self.flush()
     }
+
+    /// Truncate the file to `new_size` bytes.
+    ///
+    /// If `new_size` is greater than or equal to the current size, this is a no-op.
+    /// If `new_size` is 0, the entire cluster chain is freed.
+    /// Otherwise, excess clusters are freed and the metadata is updated.
+    pub fn truncate(&mut self, new_size: u32) -> Result<()> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.write();
+
+        if new_size >= self.metadata.size {
+            return Ok(());
+        }
+
+        if new_size == 0 {
+            if !self.metadata.has_no_cluster_allocated() {
+                self.vfat_filesystem
+                    .delete_fat_cluster_chain(self.metadata.cluster)?;
+                self.metadata.cluster = ClusterId::new(0);
+            }
+        } else {
+            let bpc = self.vfat_filesystem.bytes_per_cluster();
+            let keep_count = (new_size as u64).div_ceil(bpc as u64);
+            self.vfat_filesystem
+                .truncate_cluster_chain(self.metadata.cluster, keep_count as u32)?;
+        }
+
+        self.metadata.size = new_size;
+        if self.offset > new_size as usize {
+            self.offset = new_size as usize;
+        }
+        self.update_metadata()
+    }
 }
 
 impl Write for File {

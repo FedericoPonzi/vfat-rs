@@ -46,6 +46,61 @@ pub(crate) fn delete_cluster_chain(
     Ok(())
 }
 
+/// Truncate a cluster chain, keeping `keep_count` clusters and freeing the rest.
+///
+/// If `keep_count` is 0, the entire chain is freed (equivalent to `delete_cluster_chain`).
+/// Otherwise, the `keep_count`-th cluster is marked as `LastCluster` and all
+/// subsequent clusters are freed in reverse order for crash safety.
+pub(crate) fn truncate_cluster_chain(
+    start: ClusterId,
+    keep_count: u32,
+    device: ArcMutex<CachedPartition>,
+) -> Result<()> {
+    if keep_count == 0 {
+        return delete_cluster_chain(start, device);
+    }
+
+    // Walk the chain to find the last cluster to keep and collect the tail to free.
+    let mut current = start;
+    for _ in 1..keep_count {
+        match fat_table::next_cluster(current, device.clone())? {
+            Some(next) => current = next,
+            None => return Ok(()), // Chain is already shorter than keep_count
+        }
+    }
+    let last_keep = current;
+
+    // Collect the tail (clusters after last_keep)
+    let mut tail = Vec::new();
+    let mut cursor = match fat_table::next_cluster(last_keep, device.clone())? {
+        Some(next) => next,
+        None => return Ok(()), // Already at end of chain, nothing to free
+    };
+    loop {
+        ensure!(
+            tail.len() < MAX_CLUSTER_CHAIN_LENGTH as usize,
+            error::FilesystemCorruptedSnafu {
+                reason: "Cluster chain exceeds maximum length (possible circular reference)"
+            }
+        );
+        tail.push(cursor);
+        match fat_table::next_cluster(cursor, device.clone())? {
+            Some(next) => cursor = next,
+            None => break,
+        }
+    }
+
+    // Mark the last kept cluster as end-of-chain
+    set_fat_entry(device.clone(), last_keep, FatEntry::LastCluster(0x0FFFFFFF))?;
+
+    // Free the tail in reverse order for crash safety
+    for &cluster in tail.iter().rev() {
+        set_fat_entry(device.clone(), cluster, FatEntry::Unused)?;
+    }
+
+    Ok(())
+}
+
 pub(crate) fn set_fat_entry(
     device: Arc<CachedPartition>,
     cluster_id: ClusterId,
@@ -353,5 +408,134 @@ mod tests {
     fn test_crash_safety_delete_complete() {
         // All 5 writes succeed: full chain deleted
         crash_during_delete_helper(5);
+    }
+
+    #[test]
+    fn test_truncate_chain_keep_two() {
+        // Chain: 2→3→4→5→6(last). Keep 2 clusters → 2→3(last), free 4,5,6.
+        let fat_sector = Arc::new(SpinMutex::new([0u8; 512]));
+        let writes_before_crash = Arc::new(SpinMutex::new(None));
+
+        CrashSimDevice::set_entry(&fat_sector, 2, FatEntry::DataCluster(3));
+        CrashSimDevice::set_entry(&fat_sector, 3, FatEntry::DataCluster(4));
+        CrashSimDevice::set_entry(&fat_sector, 4, FatEntry::DataCluster(5));
+        CrashSimDevice::set_entry(&fat_sector, 5, FatEntry::DataCluster(6));
+        CrashSimDevice::set_entry(&fat_sector, 6, FatEntry::LastCluster(0x0FFFFFFF));
+
+        let device = CrashSimDevice::new(fat_sector.clone(), writes_before_crash.clone());
+        let cached = Arc::new(CachedPartition::new(
+            device,
+            512,
+            SectorId(0),
+            1,
+            SectorId(100),
+            1,
+            1,
+        ));
+
+        truncate_cluster_chain(ClusterId::new(2), 2, cached).unwrap();
+
+        // Cluster 2 → 3(last)
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 2),
+            FatEntry::DataCluster(3)
+        ));
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 3),
+            FatEntry::LastCluster(_)
+        ));
+        // Clusters 4,5,6 freed
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 4),
+            FatEntry::Unused
+        ));
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 5),
+            FatEntry::Unused
+        ));
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 6),
+            FatEntry::Unused
+        ));
+    }
+
+    #[test]
+    fn test_truncate_chain_keep_zero() {
+        // Keep 0 = free everything
+        let fat_sector = Arc::new(SpinMutex::new([0u8; 512]));
+        let writes_before_crash = Arc::new(SpinMutex::new(None));
+
+        CrashSimDevice::set_entry(&fat_sector, 2, FatEntry::DataCluster(3));
+        CrashSimDevice::set_entry(&fat_sector, 3, FatEntry::LastCluster(0x0FFFFFFF));
+
+        let device = CrashSimDevice::new(fat_sector.clone(), writes_before_crash.clone());
+        let cached = Arc::new(CachedPartition::new(
+            device,
+            512,
+            SectorId(0),
+            1,
+            SectorId(100),
+            1,
+            1,
+        ));
+
+        truncate_cluster_chain(ClusterId::new(2), 0, cached).unwrap();
+
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 2),
+            FatEntry::Unused
+        ));
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 3),
+            FatEntry::Unused
+        ));
+    }
+
+    #[test]
+    fn test_truncate_chain_keep_all() {
+        // Keep 5 on a 5-cluster chain = no-op
+        let fat_sector = Arc::new(SpinMutex::new([0u8; 512]));
+        let writes_before_crash = Arc::new(SpinMutex::new(None));
+
+        CrashSimDevice::set_entry(&fat_sector, 2, FatEntry::DataCluster(3));
+        CrashSimDevice::set_entry(&fat_sector, 3, FatEntry::DataCluster(4));
+        CrashSimDevice::set_entry(&fat_sector, 4, FatEntry::DataCluster(5));
+        CrashSimDevice::set_entry(&fat_sector, 5, FatEntry::DataCluster(6));
+        CrashSimDevice::set_entry(&fat_sector, 6, FatEntry::LastCluster(0x0FFFFFFF));
+
+        let device = CrashSimDevice::new(fat_sector.clone(), writes_before_crash.clone());
+        let cached = Arc::new(CachedPartition::new(
+            device,
+            512,
+            SectorId(0),
+            1,
+            SectorId(100),
+            1,
+            1,
+        ));
+
+        truncate_cluster_chain(ClusterId::new(2), 5, cached).unwrap();
+
+        // Chain should be unchanged
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 2),
+            FatEntry::DataCluster(3)
+        ));
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 3),
+            FatEntry::DataCluster(4)
+        ));
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 4),
+            FatEntry::DataCluster(5)
+        ));
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 5),
+            FatEntry::DataCluster(6)
+        ));
+        assert!(matches!(
+            CrashSimDevice::get_entry(&fat_sector, 6),
+            FatEntry::LastCluster(_)
+        ));
     }
 }

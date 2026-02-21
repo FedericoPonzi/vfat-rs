@@ -990,3 +990,54 @@ fn test_concurrent_read_write() -> vfat_rs::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_truncate_file() -> vfat_rs::Result<()> {
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    let (name, path) = random_name("trunc");
+    let mut file = root.create_file(name)?;
+
+    // Write 1000 bytes
+    let data = vec![0xABu8; 1000];
+    file.write(&data)?;
+    file.flush()?;
+    assert_eq!(file.metadata().size(), 1000);
+
+    // Truncate to 500
+    file.truncate(500)?;
+    assert_eq!(file.metadata().size(), 500);
+
+    // Read back and verify only 500 bytes
+    file.seek(SeekFrom::Start(0))?;
+    let mut buf = vec![0u8; 1000];
+    let read = file.read(&mut buf)?;
+    assert_eq!(read, 500);
+    assert!(buf[..500].iter().all(|&b| b == 0xAB));
+
+    // Truncate to 0
+    file.truncate(0)?;
+    assert_eq!(file.metadata().size(), 0);
+
+    // Read should return 0 bytes
+    file.seek(SeekFrom::Start(0))?;
+    let read = file.read(&mut buf)?;
+    assert_eq!(read, 0);
+
+    // Verify file still exists
+    assert!(vfat.path_exists(PathBuf::from(path.as_str()))?);
+
+    // Can write again after truncating to 0
+    file.write(b"hello")?;
+    file.flush()?;
+    assert_eq!(file.metadata().size(), 5);
+
+    file.seek(SeekFrom::Start(0))?;
+    let mut small_buf = vec![0u8; 10];
+    let read = file.read(&mut small_buf)?;
+    assert_eq!(read, 5);
+    assert_eq!(&small_buf[..5], b"hello");
+
+    Ok(())
+}

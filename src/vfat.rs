@@ -384,6 +384,17 @@ impl VfatFS {
         fat_table::delete_cluster_chain(cluster_id, self.device.clone())
     }
 
+    /// Truncate a cluster chain, keeping `keep_count` clusters and freeing the rest.
+    pub(crate) fn truncate_cluster_chain(&self, start: ClusterId, keep_count: u32) -> Result<()> {
+        fat_table::truncate_cluster_chain(start, keep_count, self.device.clone())
+    }
+
+    /// Returns the number of bytes per cluster.
+    pub(crate) fn bytes_per_cluster(&self) -> u32 {
+        let device = self.device.clone();
+        device.sectors_per_cluster * device.sector_size as u32
+    }
+
     /// Write the current allocation hint back to the FSInfo sector on disk.
     ///
     /// This is advisory — the hint speeds up the next mount but correctness

@@ -2,8 +2,11 @@ use crate::api::raw_directory_entry::{ID_DELETED_UNUSED_ENTRY, ID_LAST_ENTRY_WAS
 
 /// The first byte of an entry is called ID.
 pub enum EntryId {
+    /// This entry has been deleted (0xE5).
     Deleted,
+    /// This marks the end of the directory listing (0x00).
     EndOfEntries,
+    /// A valid (non-deleted, non-terminal) entry with the given first byte.
     Valid(u8),
 }
 impl From<u8> for EntryId {

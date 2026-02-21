@@ -7,18 +7,23 @@ use core::iter;
 pub struct PathBuf(pub String);
 
 impl PathBuf {
+    /// Create a new `PathBuf` from a string-like value.
     pub fn new<S: AsRef<str>>(path: S) -> Self {
         Self(String::from(path.as_ref()))
     }
+    /// Returns an iterator over the path components.
     pub fn iter(&self) -> impl Iterator<Item = &str> {
         iter::once("/").chain(self.0[1..].split_terminator('/'))
     }
+    /// Returns the path as a string slice.
     pub fn to_str(&self) -> &str {
         self.0.as_str()
     }
+    /// Returns a displayable string slice.
     pub fn display(&self) -> &str {
         self.to_str()
     }
+    /// Returns `true` if the path starts with `/`.
     pub fn is_absolute(&self) -> bool {
         self.0.starts_with('/')
     }

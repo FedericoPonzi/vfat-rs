@@ -2,7 +2,7 @@
 //! Use it in your custom kernel or integrate it in your user level application.
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
-//#![deny(missing_docs)]
+#![deny(missing_docs)]
 //#![deny(unsafe_code)]
 // to remove:
 //#![allow(unused_variables)]
@@ -39,10 +39,13 @@ mod fat_table;
 #[cfg(feature = "std")]
 mod fileblockdevice;
 mod formats;
+/// I/O traits and error types.
 pub mod io;
 mod macros;
+/// Master Boot Record parsing.
 pub mod mbr;
 mod time;
+/// OS-integration traits (`BlockDevice`, `TimeManagerTrait`).
 pub mod traits;
 mod vfat;
 

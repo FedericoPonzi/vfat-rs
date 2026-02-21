@@ -450,6 +450,7 @@ impl VfatFS {
         Ok(current_entry)
     }
 
+    /// Returns `true` if the given path exists on this filesystem.
     pub fn path_exists(&mut self, path: PathBuf) -> Result<bool> {
         let lock = self.fs_lock.clone();
         let _guard = lock.read();
@@ -459,6 +460,7 @@ impl VfatFS {
             x => x,
         }
     }
+    /// Returns the root directory of this filesystem.
     pub fn get_root(&mut self) -> Result<Directory> {
         let lock = self.fs_lock.clone();
         let _guard = lock.read();

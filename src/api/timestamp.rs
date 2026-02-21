@@ -31,26 +31,33 @@ defbit!(
 // 4-0 Seconds/2 (0-29)
 impl VfatTimestamp {
     // year is special as it has a min of 1980. Encapsulate logic for setting the new value.
+    /// Set the year field (clamped to 1980 minimum per VFAT spec).
     pub fn set_year(&mut self, year: u32) -> &mut Self {
         // 1980 is the min in vfat timestamps.
         self.set_value(max(year, 1980) % 1980, VfatTimestamp::YEAR)
     }
+    /// Set the seconds field (VFAT has 2-second resolution).
     pub fn set_seconds(&mut self, seconds: u32) -> &mut Self {
         // VFAT has a 2-second resolution
         self.set_value(seconds / 2, VfatTimestamp::SECONDS)
     }
+    /// Returns the year (1980–2107).
     pub fn year(&self) -> u32 {
         self.get_value(Self::YEAR) + 1980_u32
     }
+    /// Returns the month (1–12).
     pub fn month(&self) -> u32 {
         self.get_value(Self::MONTH)
     }
+    /// Returns the day of the month (1–31).
     pub fn day(&self) -> u32 {
         self.get_value(Self::DAY)
     }
+    /// Returns the hour (0–23).
     pub fn hour(&self) -> u32 {
         self.get_value(Self::HOURS)
     }
+    /// Returns the minute (0–59).
     pub fn minute(&self) -> u32 {
         self.get_value(Self::MINUTES)
     }

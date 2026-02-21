@@ -5,6 +5,7 @@ use log::debug;
 /// FilebackedBlockDevice is an implementation of BlockDevice backed by
 /// std::fs::File. It's a simple way to explore a vfat fs on a file.
 pub struct FilebackedBlockDevice {
+    /// The underlying file containing the filesystem image.
     pub image: std::fs::File,
 }
 

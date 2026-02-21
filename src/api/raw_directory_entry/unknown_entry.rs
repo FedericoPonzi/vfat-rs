@@ -5,12 +5,13 @@ use crate::api::raw_directory_entry::{
 use crate::{const_assert_eq, const_assert_size};
 use core::mem;
 
+/// A raw 32-byte directory entry whose type has not yet been determined.
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct UnknownDirectoryEntry {
     pub(crate) id: u8,
     __unused: [u8; 10],
-    /// Used to determine if a directory entry is an LFN entry.
+    /// FAT directory entry attributes byte.
     pub attributes: Attributes,
     __unused_after: [u8; 20],
 }
@@ -31,17 +32,21 @@ impl UnknownDirectoryEntry {
     pub(crate) fn is_lfn(&self) -> bool {
         self.attributes.is_lfn()
     }
+    /// Returns `true` if this marks the end of the directory listing.
     pub fn is_end_of_entries(&self) -> bool {
         let vfat_entry = VfatDirectoryEntry::from(self);
         matches!(vfat_entry, VfatDirectoryEntry::EndOfEntries(_))
     }
+    /// Returns `true` if this entry has been deleted (0xE5).
     pub fn is_deleted(&self) -> bool {
         let vfat_entry = VfatDirectoryEntry::from(self);
         matches!(vfat_entry, VfatDirectoryEntry::Deleted(_))
     }
+    /// Alias for [`is_end_of_entries`](Self::is_end_of_entries).
     pub fn last_entry(&self) -> bool {
         self.is_end_of_entries()
     }
+    /// Overwrite the first byte (entry ID) of this entry.
     pub fn set_id(&mut self, entry_id: EntryId) {
         self.id = entry_id.into();
     }
@@ -99,6 +104,7 @@ impl From<UnknownDirectoryEntry> for [u8; size_of::<UnknownDirectoryEntry>()] {
 
 // todo: find a way to parametrize const T: usize
 
+/// Convert two [`UnknownDirectoryEntry`] values into a flat byte array.
 pub fn unknown_entry_convert_to_bytes_2(
     entries: [UnknownDirectoryEntry; 2],
 ) -> [u8; size_of::<UnknownDirectoryEntry>() * 2] {

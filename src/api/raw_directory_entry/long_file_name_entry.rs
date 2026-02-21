@@ -17,14 +17,17 @@ defbit!(
     [LastLogical[6 - 6], FirstPhysical[5 - 5], Position[4 - 0],]
 );
 impl SequenceNumber {
+    /// Set the "first physical LFN entry" bit.
     pub fn set_first_physical_bit(&mut self) {
         self.set_bit(SequenceNumber::FirstPhysical);
     }
 
+    /// Returns this entry's position in the LFN sequence.
     pub fn get_position(&self) -> u8 {
         self.get_value(SequenceNumber::Position)
     }
 
+    /// Mark this entry as the last logical LFN entry.
     pub fn set_is_last_bit(&mut self) {
         self.set_bit(SequenceNumber::LastLogical);
     }
@@ -92,6 +95,7 @@ impl Debug for LongFileNameEntry {
 }
 
 impl LongFileNameEntry {
+    /// Returns `true` if attributes indicate a long file name entry.
     pub fn is_lfn(&self) -> bool {
         self.attributes.is_lfn()
     }
@@ -109,6 +113,7 @@ impl LongFileNameEntry {
         &name_array[..get_pos(name_array)]
     }
 
+    /// Collect the name fragment stored in this LFN entry.
     pub fn collect_name(&self) -> String {
         let name_characters = { self.name_characters };
         let second_set_name = { self.second_set_name };

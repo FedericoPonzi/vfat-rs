@@ -49,6 +49,7 @@ impl Metadata {
     }
 }
 impl Metadata {
+    /// Returns the file size in bytes.
     pub fn size(&self) -> usize {
         self.size as usize
     }
@@ -68,12 +69,14 @@ impl Metadata {
         Some(self.creation)
     }
 
+    /// Returns the full path to this entry (including the entry name).
     pub fn full_path(&self) -> &PathBuf {
         &self.path
     }
     pub(crate) fn parent(&self) -> &PathBuf {
         &self.parent
     }
+    /// Returns the entry's name (file or directory name, without path).
     pub fn name(&self) -> &str {
         &self.name
     }

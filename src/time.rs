@@ -6,9 +6,11 @@ use alloc::sync::Arc;
 #[derive(Clone, Debug, Default)]
 pub struct TimeManagerNoop {}
 impl TimeManagerNoop {
+    /// Create a new no-op time manager.
     pub fn new() -> Self {
         Default::default()
     }
+    /// Create a new no-op time manager wrapped in an `Arc`.
     pub fn new_arc() -> Arc<Self> {
         Arc::new(Self {})
     }

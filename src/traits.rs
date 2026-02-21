@@ -15,6 +15,7 @@ pub trait TimeManagerTrait: Debug + Send + Sync {
     /// The number of seconds since January 1, 1970, 00:00:00 UTC
     /// TODO negative dates? Should this be i64?
     fn get_current_timestamp(&self) -> u64;
+    /// Convert the current Unix timestamp into a [`VfatTimestamp`].
     fn get_current_vfat_timestamp(&self) -> VfatTimestamp {
         VfatTimestamp::from(self.get_current_timestamp())
     }

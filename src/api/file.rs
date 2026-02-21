@@ -13,6 +13,7 @@ pub struct File {
     pub(crate) vfat_filesystem: VfatFS,
     pub(crate) metadata: Metadata,
     // Current Seek position
+    /// Current seek offset in bytes from the start of the file.
     pub offset: usize,
 }
 impl fmt::Debug for File {
@@ -26,6 +27,7 @@ impl fmt::Debug for File {
 }
 
 impl File {
+    /// Create a new [`File`] handle.
     pub fn new(vfat_filesystem: VfatFS, metadata: Metadata) -> Self {
         File {
             vfat_filesystem,
@@ -33,6 +35,7 @@ impl File {
             offset: 0,
         }
     }
+    /// Returns a reference to this file's [`Metadata`].
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
     }
@@ -65,6 +68,7 @@ impl File {
         self.metadata.full_path()
     }
 
+    /// Write `buf` to this file at the current offset. Returns the number of bytes written.
     pub fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let lock = self.vfat_filesystem.fs_lock.clone();
         let _guard = lock.write();
@@ -109,6 +113,7 @@ impl File {
         Ok(amount_written)
     }
 
+    /// Flush any buffered data to the underlying block device.
     pub fn flush(&mut self) -> Result<()> {
         let lock = self.vfat_filesystem.fs_lock.clone();
         let _guard = lock.write();
@@ -116,6 +121,7 @@ impl File {
         self.vfat_filesystem.device.flush()
     }
 
+    /// Seek to a position in this file. Returns the new offset from the start.
     pub fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         let lock = self.vfat_filesystem.fs_lock.clone();
         let _guard = lock.write();
@@ -150,6 +156,7 @@ impl File {
         }
         Ok(self.offset as u64)
     }
+    /// Read from this file at the current offset into `buf`. Returns the number of bytes read.
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let lock = self.vfat_filesystem.fs_lock.clone();
         let _guard = lock.read();

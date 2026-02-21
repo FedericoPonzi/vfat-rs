@@ -8,6 +8,7 @@ use crate::api::timestamp::{Milliseconds, VfatTimestamp};
 use crate::api::Metadata;
 use crate::{const_assert_size, ClusterId};
 
+/// A standard 8.3 FAT directory entry (32 bytes).
 #[derive(Copy, Clone)]
 #[repr(C, packed)]
 pub struct RegularDirectoryEntry {
@@ -79,15 +80,18 @@ impl From<Metadata> for RegularDirectoryEntry {
 }
 
 impl RegularDirectoryEntry {
+    /// Returns `true` if this entry represents a directory.
     pub fn is_dir(&self) -> bool {
         self.attributes.is_directory()
     }
     pub(crate) fn cluster(&self) -> ClusterId {
         ClusterId::from_high_low(self.high_16bits, self.low_16bits)
     }
+    /// Returns `true` if this entry is a volume ID label.
     pub fn is_volume_id(&self) -> bool {
         self.attributes.is_volume_id()
     }
+    /// Returns `true` if this entry has LFN attributes.
     pub fn is_lfn(&self) -> bool {
         self.attributes.is_lfn()
     }
@@ -108,10 +112,12 @@ impl RegularDirectoryEntry {
         }
         v.len()
     }
+    /// Returns the file name bytes, trimmed of padding.
     pub fn file_name(&self) -> &[u8] {
         let pos = Self::early_terminate_pos(&self.file_name);
         &self.file_name[..pos]
     }
+    /// Returns the extension bytes, or `None` if empty.
     pub fn extension(&self) -> Option<&[u8]> {
         let pos = Self::early_terminate_pos(&self.file_ext);
         (pos > 0).then(|| &self.file_ext[..pos])

@@ -5,46 +5,94 @@ use snafu::prelude::*;
 pub type Result<T> = core::result::Result<T, VfatRsError>;
 use crate::io::Error as IoError;
 
+/// Errors that can occur during VFAT filesystem operations.
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 pub enum VfatRsError {
+    /// An MBR-related error.
     #[snafu(display("MBR Error: {error}"))]
-    Mbr { error: MbrError },
+    Mbr {
+        /// The underlying MBR error.
+        error: MbrError,
+    },
+    /// No free cluster available (disk full).
     #[snafu(display("Free cluster not found, probably memory is full!?"))]
     FreeClusterNotFound,
+    /// An arithmetic overflow occurred.
     #[snafu(display("Checked mult failed."))]
     CheckedMulFailed,
+    /// An entry with the given name already exists.
     #[snafu(display("An entry (file/directory) named '{}' already exists.", target))]
-    NameAlreadyInUse { target: String },
+    NameAlreadyInUse {
+        /// Name that collided.
+        target: String,
+    },
+    /// An I/O error from the underlying block device.
     #[snafu(display("Io Error: {}", source))]
-    IoError { source: IoError },
+    IoError {
+        /// The underlying I/O error.
+        source: IoError,
+    },
+    /// The partition does not have a valid VFAT signature.
     #[snafu(display("Unsupported vfat partition found, signature: {}", target))]
-    InvalidVfat { target: u8 },
+    InvalidVfat {
+        /// The invalid signature byte.
+        target: u8,
+    },
+    /// Cannot delete a non-empty directory.
     #[snafu(display(
         "Impossible delete non empty directory: {}. Contains: [{}]",
         target,
         contents
     ))]
-    NonEmptyDirectory { target: String, contents: String },
+    NonEmptyDirectory {
+        /// Directory name.
+        target: String,
+        /// Comma-separated list of remaining entries.
+        contents: String,
+    },
+    /// The requested file was not found.
     #[snafu(display("File not found: '{}'", target))]
-    FileNotFound { target: String },
+    FileNotFound {
+        /// File name that was not found.
+        target: String,
+    },
+    /// The requested entry was not found.
     #[snafu(display("Entry not found: '{}'", target))]
-    EntryNotFound { target: String },
+    EntryNotFound {
+        /// Entry name that was not found.
+        target: String,
+    },
+    /// Cannot delete the `.` or `..` pseudo-directories.
     #[snafu(display("Cannot delete pseudo directory: '{}'", target))]
-    CannotDeletePseudoDir { target: String },
+    CannotDeletePseudoDir {
+        /// Pseudo-directory name.
+        target: String,
+    },
+    /// Moving a directory into its own subtree would create a cycle.
     #[snafu(display(
         "Cannot move directory '{}' into its own subdirectory '{}'",
         source_path,
         destination_path
     ))]
     CircularMove {
+        /// Source directory path.
         source_path: String,
+        /// Destination path that is inside the source.
         destination_path: String,
     },
+    /// The supplied path is not absolute.
     #[snafu(display("Path '{}' is not absolute.", target))]
-    PathNotAbsolute { target: String },
+    PathNotAbsolute {
+        /// The non-absolute path.
+        target: String,
+    },
+    /// The filesystem image appears corrupted.
     #[snafu(display("Filesystem corruption detected: {}", reason))]
-    FilesystemCorrupted { reason: &'static str },
+    FilesystemCorrupted {
+        /// Description of the corruption.
+        reason: &'static str,
+    },
 }
 
 impl From<IoError> for VfatRsError {
@@ -59,10 +107,15 @@ impl From<crate::io::ErrorKind> for VfatRsError {
     }
 }
 
+/// MBR-specific errors.
 #[derive(Debug, Snafu)]
 pub enum MbrError {
+    /// The partition at the given index is not a FAT32 partition.
     #[snafu(display("Not a fat32 partition: {index}"))]
-    InvalidPartition { index: usize },
+    InvalidPartition {
+        /// Partition table index.
+        index: usize,
+    },
 }
 
 // Used for Impl Write/Read

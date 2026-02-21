@@ -1,5 +1,6 @@
-//! I/O traits. With std it uses the std io modules structs, otherwise uses the custom implementation which is copied from rust std to ease compatibility.
+//! I/O traits. With `std` it uses the std io module's types, otherwise uses a custom no\_std-compatible implementation.
 
+/// I/O result type.
 pub type Result<T> = core::result::Result<T, Error>;
 #[cfg(not(feature = "std"))]
 pub use nonstd_io::*;
@@ -27,7 +28,9 @@ mod nonstd_io {
 
     type Result<T> = core::result::Result<T, Error>;
 
+    /// A trait for reading bytes.
     pub trait Read {
+        /// Read bytes from this source into `buf`. Returns the number of bytes read.
         fn read(&mut self, buf: &mut [u8]) -> crate::Result<usize>;
     }
     /// A trait for objects which are byte-oriented sinks.
@@ -184,8 +187,10 @@ mod nonstd_io {
         }
     }
 
+    /// Internal error representation.
     #[derive(Debug)]
     pub enum Repr {
+        /// A simple error wrapping an [`ErrorKind`].
         Simple(ErrorKind),
     }
 

@@ -113,6 +113,7 @@ impl VfatDirectoryEntry {
         ]
     }
 
+    /// Convert into a [`RegularDirectoryEntry`] if this is a regular entry.
     pub fn into_regular(self) -> Option<RegularDirectoryEntry> {
         if let Self::Regular(regular_dir_entry) = self {
             Some(regular_dir_entry)
@@ -121,6 +122,7 @@ impl VfatDirectoryEntry {
         }
     }
 
+    /// Convert any variant into its raw [`UnknownDirectoryEntry`] representation.
     pub fn transmute_into_unknown_dir_entry(self) -> UnknownDirectoryEntry {
         match self {
             Self::Regular(entry) => entry.into(),
@@ -147,6 +149,7 @@ impl VfatDirectoryEntry {
     /// to seven, if necessary) bytes become ~1, or, if that exists already,
     /// ~2, etc., up to ~999999.
     // TODO: add some check for presence of another file called in the same way (I'm using always ~1).
+    /// Derive the 8.3 short file name from a long name.
     pub fn regular_filename_from(name: &str) -> [u8; 8] {
         // FIXME: return a result, and reject these filenames?
         let replace_invalid_dos_char = |ch| {

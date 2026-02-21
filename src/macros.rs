@@ -57,8 +57,10 @@ macro_rules! defbit {
         #[allow(non_snake_case)]
         #[derive(Debug, Copy, Clone, Eq, PartialEq)]
         #[repr(C)]
+        #[allow(missing_docs)]
         pub struct $regname ($size);
         #[allow(dead_code)]
+        #[allow(missing_docs)]
         impl $regname {
             #[inline(always)]
             pub fn new(data: $size) -> $regname {

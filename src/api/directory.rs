@@ -21,6 +21,7 @@ const SECTOR_SIZE: usize = 512;
 const ENTRIES_AMOUNT: usize = SECTOR_SIZE / size_of::<UnknownDirectoryEntry>();
 const BUF_SIZE: usize = size_of::<UnknownDirectoryEntry>() * ENTRIES_AMOUNT;
 
+/// Converts a raw byte buffer into an array of [`UnknownDirectoryEntry`] values.
 pub fn unknown_entry_convert_from_bytes_entries(
     entries: [u8; BUF_SIZE],
 ) -> [UnknownDirectoryEntry; ENTRIES_AMOUNT] {
@@ -39,9 +40,12 @@ pub fn unknown_entry_convert_from_bytes_entries(
     result
 }
 
+/// The kind of entry to create inside a directory.
 #[derive(Debug)]
 pub enum EntryType {
+    /// A regular file.
     File,
+    /// A subdirectory.
     Directory,
     // Link
 }
@@ -52,6 +56,7 @@ pub enum EntryType {
 #[derive(Debug)]
 pub struct Directory {
     pub(crate) vfat_filesystem: VfatFS,
+    /// Metadata for this directory (name, path, cluster, timestamps, etc.).
     pub metadata: Metadata,
     // An optimization, if we already created an entry, we know the offset of the last position.
     last_entry_spot: Option<usize>,
@@ -268,6 +273,7 @@ impl Directory {
             })
     }
 
+    /// Delete the entry named `target_name` from this directory.
     pub fn delete(&mut self, target_name: String) -> error::Result<()> {
         let lock = self.vfat_filesystem.fs_lock.clone();
         let _guard = lock.write();
@@ -404,6 +410,7 @@ impl Directory {
         Ok(self.contents_direntry()?.len())
     }
 
+    /// Returns all entries (files and subdirectories) contained in this directory.
     pub fn contents(&self) -> error::Result<Vec<DirectoryEntry>> {
         let lock = self.vfat_filesystem.fs_lock.clone();
         let _guard = lock.read();
@@ -496,6 +503,7 @@ impl Directory {
             })
     }
 
+    /// Rename or move `target_name` to `destination_path`.
     pub fn rename(
         &mut self,
         target_name: String,

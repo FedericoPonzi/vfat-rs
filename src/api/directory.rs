@@ -127,7 +127,7 @@ impl Directory {
             metadata.cluster,
             Self::attributes_from_entry(&entry_type),
             &existing_short_names,
-        );
+        )?;
         let entries_len = entries.len();
         let first_empty_spot_offset = if let Some(spot) = self.last_entry_spot {
             spot
@@ -594,8 +594,12 @@ impl Directory {
         // Write new entries in the destination directory
         let attributes = metadata.attributes;
         let existing_short_names = dest_dir.collect_short_names()?;
-        let entries: Vec<UnknownDirectoryEntry> =
-            VfatDirectoryEntry::new_vfat_entry(new_name.as_str(), metadata.cluster, attributes, &existing_short_names);
+        let entries: Vec<UnknownDirectoryEntry> = VfatDirectoryEntry::new_vfat_entry(
+            new_name.as_str(),
+            metadata.cluster,
+            attributes,
+            &existing_short_names,
+        )?;
         let entries_len = entries.len();
         let first_empty_spot_offset = if let Some(spot) = dest_dir.last_entry_spot {
             spot
@@ -678,8 +682,12 @@ impl Directory {
         // delete old file
         let attributes = metadata.attributes;
         let existing_short_names = self.collect_short_names()?;
-        let entries: Vec<UnknownDirectoryEntry> =
-            VfatDirectoryEntry::new_vfat_entry(new_name.as_str(), metadata.cluster, attributes, &existing_short_names);
+        let entries: Vec<UnknownDirectoryEntry> = VfatDirectoryEntry::new_vfat_entry(
+            new_name.as_str(),
+            metadata.cluster,
+            attributes,
+            &existing_short_names,
+        )?;
         let entries_len = entries.len();
         let first_empty_spot_offset = if let Some(spot) = self.last_entry_spot {
             spot

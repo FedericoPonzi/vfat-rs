@@ -244,7 +244,15 @@ impl VfatDirectoryEntry {
         cluster_id: ClusterId,
         attributes: Attributes,
         existing_short_names: &[[u8; 8]],
-    ) -> Vec<UnknownDirectoryEntry> {
+    ) -> crate::error::Result<Vec<UnknownDirectoryEntry>> {
+        const MAX_LFN_NAME_LEN: usize = 255;
+        if name.len() > MAX_LFN_NAME_LEN {
+            return Err(crate::error::VfatRsError::NameTooLong {
+                name: String::from(name),
+                length: name.len(),
+            });
+        }
+
         // Find a non-colliding short name by incrementing the tail number
         let mut tail = 1u32;
         let regular_filename = loop {
@@ -280,8 +288,6 @@ impl VfatDirectoryEntry {
         let mut buff_b = name;
         // Calculate how many lfns we will need.
         const SINGLE_LFN_SIZE: usize = 5 + 6 + 2;
-        // TODO: this cast to u8 might overflow. this is because lfn have a limit in length. in that case we should error.
-        // Integer division with ceiling: (a + b - 1) / b
         let required_lfns = name.len().div_ceil(SINGLE_LFN_SIZE) as u8;
         debug!("Required LFNS: {}", required_lfns);
         // Other then for stopping the loop below, it's also useful for the SequenceNumber attribute.
@@ -337,7 +343,7 @@ impl VfatDirectoryEntry {
             );
         }
         ret.push(Self::Regular(regular).transmute_into_unknown_dir_entry());
-        ret
+        Ok(ret)
     }
 }
 
@@ -388,7 +394,8 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             &[],
-        );
+        )
+        .unwrap();
         let expected_regular_name = b"4CHARS~1";
         let expecte_ext = b"EXT";
         assert!(!given.is_empty());
@@ -421,7 +428,8 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             &[],
-        );
+        )
+        .unwrap();
         given
             .clone()
             .into_iter()
@@ -503,12 +511,12 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             &existing,
-        );
+        )
+        .unwrap();
         // The regular entry should use ~2 instead of ~1
-        let regular: RegularDirectoryEntry =
-            VfatDirectoryEntry::from(entries.last().unwrap())
-                .into_regular()
-                .unwrap();
+        let regular: RegularDirectoryEntry = VfatDirectoryEntry::from(entries.last().unwrap())
+            .into_regular()
+            .unwrap();
         assert_eq!(&regular.file_name, b"4CHARS~2");
     }
 
@@ -521,11 +529,44 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             &[],
-        );
-        let regular: RegularDirectoryEntry =
-            VfatDirectoryEntry::from(entries.last().unwrap())
-                .into_regular()
-                .unwrap();
+        )
+        .unwrap();
+        let regular: RegularDirectoryEntry = VfatDirectoryEntry::from(entries.last().unwrap())
+            .into_regular()
+            .unwrap();
         assert_eq!(&regular.file_name, b"4CHARS~1");
+    }
+
+    #[test]
+    fn test_name_too_long_returns_error() {
+        let long_name = "a".repeat(256);
+        let result = VfatDirectoryEntry::new_vfat_entry(
+            &long_name,
+            ClusterId::new(0),
+            Attributes::new_directory(),
+            &[],
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::error::VfatRsError::NameTooLong { length: 256, .. }
+            ),
+            "Expected NameTooLong, got: {:?}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_max_length_name_succeeds() {
+        let name = "a".repeat(255);
+        let result = VfatDirectoryEntry::new_vfat_entry(
+            &name,
+            ClusterId::new(0),
+            Attributes::new_directory(),
+            &[],
+        );
+        assert!(result.is_ok());
     }
 }

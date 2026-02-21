@@ -93,6 +93,14 @@ pub enum VfatRsError {
         /// Description of the corruption.
         reason: &'static str,
     },
+    /// The file or directory name exceeds the maximum length (255 characters).
+    #[snafu(display("Name too long ({} chars, max 255): '{}'", length, name))]
+    NameTooLong {
+        /// The offending name.
+        name: String,
+        /// Actual length.
+        length: usize,
+    },
 }
 
 impl From<IoError> for VfatRsError {

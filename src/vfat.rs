@@ -22,7 +22,7 @@ use crate::{
     DirectoryEntry, Metadata, RegularDirectoryEntry, SectorId, UnknownDirectoryEntry,
     VfatDirectoryEntry, VfatRsError, EBPF_VFAT_MAGIC, EBPF_VFAT_MAGIC_ALT,
 };
-use crate::{PathBuf, TimeManagerTrait};
+use crate::{PathBuf, TimeManagerTrait, SECTOR_SIZE};
 
 /// Maximum cluster chain length to prevent infinite loops in corrupted filesystems.
 /// 2^20 = 1,048,576 iterations supports files up to 512GB with 512KB clusters.
@@ -120,7 +120,7 @@ impl VfatFS {
         device: &mut B,
         start_sector: u32,
     ) -> Result<FullExtendedBIOSParameterBlock> {
-        let mut buff = [0u8; 512];
+        let mut buff = [0u8; SECTOR_SIZE];
         device.read_sector(start_sector.into(), &mut buff)?;
         Ok(Cursor::new(&buff).read_le()?)
     }
@@ -233,7 +233,7 @@ impl VfatFS {
     /// Read the FSInfo sector and return the next-free cluster hint.
     /// Returns `None` on any error or invalid signatures.
     fn read_fsinfo_hint<B: BlockDevice>(device: &mut B, sector: SectorId) -> Option<u32> {
-        let mut buf = [0u8; 512];
+        let mut buf = [0u8; SECTOR_SIZE];
         device.read_sector(sector, &mut buf).ok()?;
         let fsinfo: FSInfoSector = Cursor::new(&buf).read_le().ok()?;
         if !fsinfo.is_valid() {
@@ -267,7 +267,7 @@ impl VfatFS {
     /// clusters at the beginning of the FAT.
     pub(crate) fn find_free_cluster(&self) -> Result<Option<ClusterId>> {
         info!("Starting find free cluster routine");
-        const ENTRIES_PER_SECTOR: usize = 512 / FAT_ENTRY_SIZE;
+        const ENTRIES_PER_SECTOR: usize = SECTOR_SIZE / FAT_ENTRY_SIZE;
         const BUF_SIZE: usize = FAT_ENTRY_SIZE * ENTRIES_PER_SECTOR;
 
         let hint = *self.last_alloc_hint.lock();

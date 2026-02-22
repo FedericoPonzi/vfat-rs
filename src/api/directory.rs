@@ -16,8 +16,7 @@ use crate::cluster::cluster_reader::ClusterChainReader;
 use crate::{error, PathBuf};
 use crate::{ClusterId, VfatFS};
 
-// TODO: this assumes sector size
-const SECTOR_SIZE: usize = 512;
+use crate::SECTOR_SIZE;
 const ENTRIES_AMOUNT: usize = SECTOR_SIZE / size_of::<UnknownDirectoryEntry>();
 const BUF_SIZE: usize = size_of::<UnknownDirectoryEntry>() * ENTRIES_AMOUNT;
 

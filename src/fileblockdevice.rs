@@ -11,7 +11,7 @@ pub struct FilebackedBlockDevice {
 
 impl BlockDevice for FilebackedBlockDevice {
     fn sector_size(&self) -> usize {
-        512
+        crate::SECTOR_SIZE
     }
 
     fn read_sector_offset(

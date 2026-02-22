@@ -28,7 +28,7 @@ pub trait TimeManagerTrait: Debug + Send + Sync {
 pub trait BlockDevice {
     /// Sector size in bytes.
     fn sector_size(&self) -> usize {
-        512
+        crate::SECTOR_SIZE
     }
 
     /// Read sector `n` in `buf`, up to min(self.sector_size() and buf.size()).

@@ -3,8 +3,13 @@ name = "vfat-rs"
 version = "0.1.0"
 authors = ["Federico Ponzi <me@fponzi.me>"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "A no_std-compatible FAT32/VFAT filesystem implementation in Rust for custom kernels"
+license = "MIT"
+repository = "https://github.com/FedericoPonzi/vfat-rs"
+homepage = "https://gh.fponzi.me/vfat-rs/"
+readme = "README.md"
+keywords = ["fat32", "vfat", "filesystem", "no_std", "embedded"]
+categories = ["no-std", "filesystem", "embedded"]
 
 [profile.test]
 opt-level = 2

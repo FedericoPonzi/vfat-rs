@@ -2,7 +2,7 @@ mod helpers;
 
 use std::time::Duration;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use helpers::fs_setup::BenchFs;
 
 fn bench_dir_create_file(c: &mut Criterion) {

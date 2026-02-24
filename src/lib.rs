@@ -14,10 +14,10 @@ extern crate core;
 
 use alloc::sync::Arc;
 
+pub use api::EntryType;
 use api::raw_directory_entry::{
     Attributes, RegularDirectoryEntry, UnknownDirectoryEntry, VfatDirectoryEntry,
 };
-pub use api::EntryType;
 pub use api::{Directory, DirectoryEntry, Metadata, VfatMetadataTrait};
 pub(crate) use cache::CachedPartition;
 pub use error::{Result, VfatRsError};

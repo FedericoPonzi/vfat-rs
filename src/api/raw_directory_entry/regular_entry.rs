@@ -3,10 +3,10 @@ use alloc::string::String;
 use core::fmt;
 use core::fmt::{Debug, Formatter};
 
+use crate::api::Metadata;
 use crate::api::raw_directory_entry::{Attributes, VfatDirectoryEntry};
 use crate::api::timestamp::{Milliseconds, VfatTimestamp};
-use crate::api::Metadata;
-use crate::{const_assert_size, ClusterId};
+use crate::{ClusterId, const_assert_size};
 
 /// A standard 8.3 FAT directory entry (32 bytes).
 #[derive(Copy, Clone)]

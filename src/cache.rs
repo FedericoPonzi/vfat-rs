@@ -6,10 +6,10 @@ use alloc::vec::Vec;
 use log::info;
 use spin::mutex::SpinMutex;
 
+use crate::SectorId;
 use crate::error::Result;
 use crate::formats::cluster_id::ClusterId;
 use crate::traits::BlockDevice;
-use crate::SectorId;
 
 /// A cached sector entry.
 struct CacheEntry {

@@ -1,8 +1,8 @@
 use alloc::sync::Arc;
 use core::fmt;
 
-use binrw::io::Cursor;
 use binrw::BinReaderExt;
+use binrw::io::Cursor;
 use log::{debug, info, trace};
 use snafu::ensure;
 use spin::mutex::SpinMutex;
@@ -10,19 +10,19 @@ use spin::rwlock::RwLock;
 
 use crate::alloc::string::ToString;
 use crate::cluster::{cluster_reader, cluster_writer};
-use crate::fat_table::FatEntry;
 use crate::fat_table::FAT_ENTRY_SIZE;
+use crate::fat_table::FatEntry;
 use crate::formats::extended_bios_parameter_block::{
     BiosParameterBlock, ExtendedBiosParameterBlock, FullExtendedBIOSParameterBlock,
 };
 use crate::formats::fsinfo::FSInfoSector;
-use crate::{error, Result, VfatMetadataTrait};
 use crate::{
-    fat_table, ArcMutex, Attributes, BlockDevice, CachedPartition, ClusterId, Directory,
-    DirectoryEntry, Metadata, RegularDirectoryEntry, SectorId, UnknownDirectoryEntry,
-    VfatDirectoryEntry, VfatRsError, EBPF_VFAT_MAGIC, EBPF_VFAT_MAGIC_ALT,
+    ArcMutex, Attributes, BlockDevice, CachedPartition, ClusterId, Directory, DirectoryEntry,
+    EBPF_VFAT_MAGIC, EBPF_VFAT_MAGIC_ALT, Metadata, RegularDirectoryEntry, SectorId,
+    UnknownDirectoryEntry, VfatDirectoryEntry, VfatRsError, fat_table,
 };
-use crate::{PathBuf, TimeManagerTrait, SECTOR_SIZE};
+use crate::{PathBuf, SECTOR_SIZE, TimeManagerTrait};
+use crate::{Result, VfatMetadataTrait, error};
 
 /// Maximum cluster chain length to prevent infinite loops in corrupted filesystems.
 /// 2^20 = 1,048,576 iterations supports files up to 512GB with 512KB clusters.

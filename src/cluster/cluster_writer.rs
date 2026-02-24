@@ -1,4 +1,4 @@
-use crate::{error::Result, fat_table, ClusterId, SectorId, VfatFS};
+use crate::{ClusterId, SectorId, VfatFS, error::Result, fat_table};
 use log::debug;
 
 #[derive(Debug)]

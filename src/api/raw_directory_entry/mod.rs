@@ -8,14 +8,14 @@ use core::iter;
 
 use log::{debug, info};
 
-pub use crate::api::raw_directory_entry::formats::{attribute, Attributes, EntryId};
+use crate::ClusterId;
+pub use crate::api::raw_directory_entry::formats::{Attributes, EntryId, attribute};
 pub use crate::api::raw_directory_entry::long_file_name_entry::{
     LongFileNameEntry, SequenceNumber,
 };
 pub use crate::api::raw_directory_entry::regular_entry::RegularDirectoryEntry;
 pub use crate::api::raw_directory_entry::unknown_entry::*;
 use crate::api::timestamp::VfatTimestamp;
-use crate::ClusterId;
 
 mod formats;
 mod long_file_name_entry;
@@ -159,11 +159,7 @@ impl VfatDirectoryEntry {
     pub fn regular_filename_from_with_tail(name: &str, tail: u32) -> [u8; 8] {
         let replace_invalid_dos_char = |ch| {
             const INVALID_CHARS: [char; 6] = ['+', ',', ';', '=', '[', ']'];
-            if INVALID_CHARS.contains(&ch) {
-                '_'
-            } else {
-                ch
-            }
+            if INVALID_CHARS.contains(&ch) { '_' } else { ch }
         };
 
         let tail_str = alloc::format!("~{}", tail);
@@ -351,14 +347,14 @@ impl VfatDirectoryEntry {
 mod test {
     extern crate std;
 
+    use crate::ClusterId;
     use crate::api::raw_directory_entry::formats::Attributes;
     use crate::api::raw_directory_entry::{
         LongFileNameEntry, RegularDirectoryEntry, VfatDirectoryEntry,
     };
-    use crate::ClusterId;
 
     fn init() {
-        std::env::set_var("RUST_LOG", "debug");
+        unsafe { std::env::set_var("RUST_LOG", "debug") };
         let _ = env_logger::builder().is_test(true).try_init();
     }
 

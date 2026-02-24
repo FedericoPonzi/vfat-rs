@@ -8,13 +8,13 @@ use snafu::ensure;
 
 use crate::api::raw_directory_entry::EntryId::Deleted;
 use crate::api::raw_directory_entry::{
-    unknown_entry_convert_to_bytes_2, Attributes, LongFileNameEntry, RegularDirectoryEntry,
-    UnknownDirectoryEntry, VfatDirectoryEntry,
+    Attributes, LongFileNameEntry, RegularDirectoryEntry, UnknownDirectoryEntry,
+    VfatDirectoryEntry, unknown_entry_convert_to_bytes_2,
 };
 use crate::api::{DirectoryEntry, File, Metadata, VfatMetadataTrait};
 use crate::cluster::cluster_reader::ClusterChainReader;
-use crate::{error, PathBuf};
 use crate::{ClusterId, VfatFS};
+use crate::{PathBuf, error};
 
 use crate::SECTOR_SIZE;
 const ENTRIES_AMOUNT: usize = SECTOR_SIZE / size_of::<UnknownDirectoryEntry>();
@@ -192,10 +192,10 @@ impl Directory {
             for entry in unknown_entries.iter() {
                 if entry.is_end_of_entries() {
                     // End-of-entries: any accumulated run (or this position) works
-                    if let Some(start) = run_start {
-                        if run_len >= slots_needed {
-                            return Ok(start);
-                        }
+                    if let Some(start) = run_start
+                        && run_len >= slots_needed
+                    {
+                        return Ok(start);
                     }
                     // Fall back to end-of-entries position (original behavior)
                     return Ok(offset);

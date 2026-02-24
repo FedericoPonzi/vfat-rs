@@ -2,10 +2,10 @@ pub(crate) use fat_entry::*;
 pub(crate) use fat_reader::*;
 pub(crate) use fat_writer::*;
 
+use crate::VfatRsError::CheckedMulFailed;
 use crate::cache::CachedPartition;
 use crate::formats::cluster_id::ClusterId;
-use crate::VfatRsError::CheckedMulFailed;
-use crate::{error, SectorId};
+use crate::{SectorId, error};
 
 mod fat_entry;
 mod fat_reader;

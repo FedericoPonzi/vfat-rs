@@ -1,7 +1,7 @@
-use crate::api::raw_directory_entry::Attributes;
-use crate::api::timestamp::VfatTimestamp;
 use crate::ClusterId;
 use crate::PathBuf;
+use crate::api::raw_directory_entry::Attributes;
+use crate::api::timestamp::VfatTimestamp;
 use alloc::string::String;
 
 /// Metadatas are common to every entry type.

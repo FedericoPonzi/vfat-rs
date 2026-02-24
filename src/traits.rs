@@ -6,7 +6,7 @@
 //! * Alloc support. It is mostly used to allocate some vec and strings, it might be put behind a feature flag later on.
 //!
 use crate::api::timestamp::VfatTimestamp;
-use crate::{error, SectorId};
+use crate::{SectorId, error};
 use core::fmt::Debug;
 
 /// An interface to the OS-owned timer. Needed for timestamping file creations and update.

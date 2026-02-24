@@ -1,5 +1,5 @@
 use crate::cache::CachedPartition;
-use crate::{fat_table, ArcMutex, ClusterId, Result, SectorId};
+use crate::{ArcMutex, ClusterId, Result, SectorId, fat_table};
 
 /// this implements and encapsulates the logic needed to traverse
 /// cluster chains, by reading the FAT table.

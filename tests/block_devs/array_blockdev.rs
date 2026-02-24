@@ -1,6 +1,6 @@
-use vfat_rs::io::Write;
 use vfat_rs::BlockDevice;
 use vfat_rs::SectorId;
+use vfat_rs::io::Write;
 
 //noinspection RsExternalLinter
 pub struct ArrayBackedBlockDevice {

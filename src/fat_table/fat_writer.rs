@@ -2,8 +2,8 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use crate::error::{self, Result};
-use crate::fat_table::{get_params, FatEntry};
-use crate::{fat_table, ArcMutex, CachedPartition, ClusterId};
+use crate::fat_table::{FatEntry, get_params};
+use crate::{ArcMutex, CachedPartition, ClusterId, fat_table};
 use snafu::ensure;
 
 /// Maximum cluster chain length to prevent infinite loops in corrupted filesystems.

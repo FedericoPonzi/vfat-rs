@@ -8,7 +8,7 @@ use rand::RngExt;
 use crate::common::VfatFsRandomPath;
 use block_devs::FilebackedBlockDevice;
 use vfat_rs::mbr::MasterBootRecord;
-use vfat_rs::{mbr, BlockDevice, PathBuf, SectorId, VfatFS};
+use vfat_rs::{BlockDevice, PathBuf, SectorId, VfatFS, mbr};
 
 mod block_devs;
 mod common;
@@ -20,8 +20,8 @@ mod common;
 */
 fn init() -> (FilebackedBlockDevice, MasterBootRecord, VfatFsRandomPath) {
     // If this is set to debug for stress tests, this produces a lot of logs that can cause OOM kill.
-    std::env::set_var("RUST_LOG", "debug");
-    std::env::set_var("RUST_BACKTRACE", "1");
+    unsafe { std::env::set_var("RUST_LOG", "debug") };
+    unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
     let _ = env_logger::builder().is_test(true).try_init();
     let vfatfs_randompath = common::setup();
     let mut fs = FilebackedBlockDevice {
@@ -207,9 +207,10 @@ fn test_get_path() -> vfat_rs::Result<()> {
     assert!(file.creation().minute() <= 60);
     assert!(file.creation().second() <= 60);
     info!("Hello txt found!");
-    assert!(vfat
-        .get_from_absolute_path("/folder/some/deep/nested/folder/file".into())
-        .is_ok());
+    assert!(
+        vfat.get_from_absolute_path("/folder/some/deep/nested/folder/file".into())
+            .is_ok()
+    );
     Ok(())
 }
 #[test]

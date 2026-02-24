@@ -1,8 +1,8 @@
 [package]
 name = "vfat-rs"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Federico Ponzi <me@fponzi.me>"]
-edition = "2021"
+edition = "2024"
 description = "A no_std-compatible FAT32/VFAT filesystem implementation in Rust for custom kernels"
 license = "MIT"
 repository = "https://github.com/FedericoPonzi/vfat-rs"

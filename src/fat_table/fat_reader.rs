@@ -1,7 +1,7 @@
+use crate::ArcMutex;
 use crate::error::Result;
 use crate::fat_table::fat_entry::FAT_ENTRY_SIZE;
-use crate::fat_table::{get_params, FatEntry};
-use crate::ArcMutex;
+use crate::fat_table::{FatEntry, get_params};
 use crate::{CachedPartition, ClusterId};
 
 /// Returns the next clusterid in the chain after the provided cluster_id, if any.

@@ -1,23 +1,22 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
+  push:
+    tags:
+      - 'v*.*.*'
 
 jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/CI.yml
+
   publish:
     name: Publish to crates.io
+    needs: ci
     runs-on: ubuntu-latest
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable

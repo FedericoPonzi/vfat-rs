@@ -1,6 +1,7 @@
 # VFAT / FAT32
 
 [![CI](https://github.com/FedericoPonzi/vfat-rs/actions/workflows/CI.yml/badge.svg)](https://github.com/FedericoPonzi/vfat-rs/actions/workflows/CI.yml)
+[![crates.io](https://img.shields.io/crates/v/vfat-rs.svg)](https://crates.io/crates/vfat-rs)
 
 A simple VFAT implementation written in rust, and mostly tested against Linux's vfat driver.
 
@@ -23,6 +24,11 @@ This component was first developed with `no_std` in mind. `std` is supported beh
 for integration testing.
 
 ## Using it in your kernel
+
+You can pool the library from [crates.io](https://crates.io/crates/vfat-rs):
+```
+cargo add vfat-rs
+```
 
 The exported apis are in the api module. The OS should provide:
 
@@ -53,5 +59,7 @@ cargo run --example simple --features std
 
 ### Benchmarks
 
-CI runs benchmarks on every push to `master` and publishes historical results with trend charts to [the benchmark dashboard](http://gh.fponzi.me/vfat-rs/dev/bench/). If a benchmark regresses by more than 50%, an alert comment is created automatically.
+CI runs benchmarks on every push to `master` and publishes historical results with trend charts to [the benchmark dashboard](https://gh.fponzi.me/vfat-rs/dev/bench/). If a benchmark regresses by more than 50%, an alert comment is created automatically.
+
+On CI (file-backed block device), typical numbers are: ~378 MB/s cached reads and ~149 MB/s cached writes for 256KB files, with directory operations (list, delete, contains, rename) completing in 3–14 µs. The caching layer provides 2–23x speedups depending on the operation. Actual performance will depend on the `BlockDevice` implementation provided by your OS.
 

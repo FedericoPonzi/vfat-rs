@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/FedericoPonzi/vfat-rs/actions/workflows/CI.yml/badge.svg)](https://github.com/FedericoPonzi/vfat-rs/actions/workflows/CI.yml)
 [![crates.io](https://img.shields.io/crates/v/vfat-rs.svg)](https://crates.io/crates/vfat-rs)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.txt)
 
 A simple VFAT implementation written in rust, and mostly tested against Linux's vfat driver.
 

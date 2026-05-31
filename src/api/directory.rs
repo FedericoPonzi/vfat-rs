@@ -163,8 +163,17 @@ impl Directory {
         if let EntryType::Directory = entry_type {
             let entries =
                 VfatDirectoryEntry::create_pseudo_dir_entries(metadata.cluster, ClusterId::new(0));
+            let pseudo = unknown_entry_convert_to_bytes_2(entries);
+            // Zero-initialise the whole first cluster, not just the `.`/`..` entries.
+            // The cluster handed out by the allocator may be a recycled one that still
+            // contains stale directory data (this happens once the disk fills up and the
+            // allocator wraps around to reuse freed clusters). Without zeroing, the bytes
+            // past `..` would be parsed as bogus directory entries. Writing a full,
+            // zeroed cluster guarantees an end-of-entries (0x00) marker right after `..`.
+            let cluster_size = self.vfat_filesystem.bytes_per_cluster() as usize;
+            let mut buf = alloc::vec![0u8; cluster_size];
+            buf[..pseudo.len()].copy_from_slice(&pseudo);
             let mut cw = self.vfat_filesystem.cluster_chain_writer(metadata.cluster);
-            let buf = unknown_entry_convert_to_bytes_2(entries);
             cw.write(&buf)?;
         }
         // Invalidate cached spot so next operation re-scans for deleted entries

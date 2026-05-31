@@ -290,6 +290,25 @@ impl File {
         }
         self.update_metadata()
     }
+
+    /// Overwrite this file's creation and/or last-modification timestamps and
+    /// flush the change to the on-disk directory entry. A `None` argument leaves
+    /// the corresponding timestamp unchanged.
+    ///
+    /// Timestamps are stored with VFAT's 2-second resolution and a 1980 epoch
+    /// floor (see [`VfatTimestamp`](crate::VfatTimestamp)), so the persisted
+    /// value may be rounded relative to the requested one. FAT has no separate
+    /// last-access *time* (only a date), so it is not represented here.
+    pub fn set_timestamps(
+        &mut self,
+        creation: Option<crate::VfatTimestamp>,
+        modification: Option<crate::VfatTimestamp>,
+    ) -> Result<()> {
+        let lock = self.vfat_filesystem.fs_lock.clone();
+        let _guard = lock.write();
+        self.metadata.set_timestamps(creation, modification);
+        self.update_metadata()
+    }
 }
 
 impl Write for File {

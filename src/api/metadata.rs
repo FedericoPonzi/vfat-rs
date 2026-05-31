@@ -93,4 +93,21 @@ impl Metadata {
     pub(crate) fn has_no_cluster_allocated(&self) -> bool {
         self.cluster == ClusterId::new(0)
     }
+
+    /// Overwrite the creation and/or last-modification timestamps. A `None`
+    /// argument leaves the corresponding field unchanged. This only mutates the
+    /// in-memory metadata; callers must flush it to disk (e.g. via
+    /// [`File::set_timestamps`]).
+    pub(crate) fn set_timestamps(
+        &mut self,
+        creation: Option<VfatTimestamp>,
+        last_update: Option<VfatTimestamp>,
+    ) {
+        if let Some(creation) = creation {
+            self.creation = creation;
+        }
+        if let Some(last_update) = last_update {
+            self.last_update = last_update;
+        }
+    }
 }

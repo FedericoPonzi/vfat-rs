@@ -13,7 +13,7 @@ random_name="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 10)"
 
 set -e
 # FS size in megabytes (override with 2nd arg):
-fs_size="${2:-50}"
+fs_size="${2:-5000}"
 # Desired size in bytes
 size=$((${fs_size}*(1<<20)))
 # align to next MB (https://www.thomas-krenn.com/en/wiki/Partition_Alignment)

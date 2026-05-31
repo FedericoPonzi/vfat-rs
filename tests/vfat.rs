@@ -501,6 +501,42 @@ fn test_rename_dir() -> vfat_rs::Result<()> {
     test_rename(true)
 }
 
+/// Regression test: renaming a file with content must preserve its size and
+/// data. The directory-entry builder previously hard-coded file_size = 0, so a
+/// rename silently truncated the file's reported size to zero.
+#[test]
+fn test_rename_preserves_file_content() -> vfat_rs::Result<()> {
+    const CONTENT: &[u8] = b"rename must not lose my bytes!";
+
+    let (mut vfat, _f) = init_vfat()?;
+    let mut root = vfat.get_root()?;
+
+    let (file_name, file_path) = random_name("rename_content");
+    let mut file = root.create_file(file_name.clone())?;
+    file.write_all(CONTENT).expect("write all");
+
+    let (_new_name, new_path) = random_name("renamed_content");
+    root.rename(file_name, new_path.clone().into())?;
+
+    assert!(!vfat.path_exists(file_path.into())?);
+    assert!(vfat.path_exists(new_path.clone().into())?);
+
+    let mut renamed = vfat
+        .get_from_absolute_path(new_path.as_str().into())?
+        .into_file()
+        .unwrap();
+    assert_eq!(
+        renamed.metadata().size(),
+        CONTENT.len(),
+        "rename must preserve the file size"
+    );
+    let mut buf = vec![0u8; CONTENT.len()];
+    renamed.read(&mut buf)?;
+    assert_eq!(buf, CONTENT, "rename must preserve the file content");
+
+    Ok(())
+}
+
 fn test_rename(is_dir: bool) -> vfat_rs::Result<()> {
     let file_name = "hello_world";
     let used_name_path = "/hello_world";

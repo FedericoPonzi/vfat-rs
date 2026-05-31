@@ -239,6 +239,7 @@ impl VfatDirectoryEntry {
         name: &str,
         cluster_id: ClusterId,
         attributes: Attributes,
+        file_size: u32,
         existing_short_names: &[[u8; 8]],
     ) -> crate::error::Result<Vec<UnknownDirectoryEntry>> {
         const MAX_LFN_NAME_LEN: usize = 255;
@@ -278,7 +279,7 @@ impl VfatDirectoryEntry {
             high_16bits: high_cluster_id,
             last_modification_time: VfatTimestamp::new(1385663476),
             low_16bits: low_cluster_id,
-            file_size: 0,
+            file_size,
         };
         let mut ret = vec![];
         let mut buff_b = name;
@@ -389,6 +390,7 @@ mod test {
             "4chars.ext",
             ClusterId::new(0),
             Attributes::new_directory(),
+            0,
             &[],
         )
         .unwrap();
@@ -423,6 +425,7 @@ mod test {
             name,
             ClusterId::new(0),
             Attributes::new_directory(),
+            0,
             &[],
         )
         .unwrap();
@@ -506,6 +509,7 @@ mod test {
             "4chars.ext",
             ClusterId::new(0),
             Attributes::new_directory(),
+            0,
             &existing,
         )
         .unwrap();
@@ -524,6 +528,7 @@ mod test {
             "4chars.ext",
             ClusterId::new(0),
             Attributes::new_directory(),
+            0,
             &[],
         )
         .unwrap();
@@ -540,6 +545,7 @@ mod test {
             &long_name,
             ClusterId::new(0),
             Attributes::new_directory(),
+            0,
             &[],
         );
         assert!(result.is_err());
@@ -561,8 +567,29 @@ mod test {
             &name,
             ClusterId::new(0),
             Attributes::new_directory(),
+            0,
             &[],
         );
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_new_vfat_entry_sets_file_size() {
+        init();
+        // Regression test: `new_vfat_entry` used to hard-code file_size = 0,
+        // which zeroed a file's size whenever it was renamed or moved. The
+        // requested size must be written into the regular directory entry.
+        let entries = VfatDirectoryEntry::new_vfat_entry(
+            "data.bin",
+            ClusterId::new(3),
+            Attributes::new_directory(),
+            4321,
+            &[],
+        )
+        .unwrap();
+        let regular: RegularDirectoryEntry = VfatDirectoryEntry::from(entries.last().unwrap())
+            .into_regular()
+            .unwrap();
+        assert_eq!({ regular.file_size }, 4321);
     }
 }

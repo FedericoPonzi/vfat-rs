@@ -18,7 +18,7 @@ pub use api::EntryType;
 use api::raw_directory_entry::{
     Attributes, RegularDirectoryEntry, UnknownDirectoryEntry, VfatDirectoryEntry,
 };
-pub use api::{Directory, DirectoryEntry, Metadata, VfatMetadataTrait};
+pub use api::{Directory, DirectoryEntry, File, Metadata, VfatMetadataTrait};
 pub(crate) use cache::CachedPartition;
 pub use error::{Result, VfatRsError};
 pub(crate) use formats::cluster_id::ClusterId;

@@ -18,6 +18,7 @@ pub use api::EntryType;
 use api::raw_directory_entry::{
     Attributes, RegularDirectoryEntry, UnknownDirectoryEntry, VfatDirectoryEntry,
 };
+pub use api::timestamp::VfatTimestamp;
 pub use api::{Directory, DirectoryEntry, File, Metadata, VfatMetadataTrait};
 pub(crate) use cache::CachedPartition;
 pub use error::{Result, VfatRsError};

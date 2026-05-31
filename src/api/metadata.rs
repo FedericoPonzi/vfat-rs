@@ -69,6 +69,16 @@ impl Metadata {
         Some(self.creation)
     }
 
+    /// Returns the entry's creation timestamp.
+    pub fn created(&self) -> VfatTimestamp {
+        self.creation
+    }
+
+    /// Returns the entry's last-modification timestamp.
+    pub fn modified(&self) -> VfatTimestamp {
+        self.last_update
+    }
+
     /// Returns the full path to this entry (including the entry name).
     pub fn full_path(&self) -> &PathBuf {
         &self.path

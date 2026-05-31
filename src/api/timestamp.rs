@@ -66,6 +66,50 @@ impl VfatTimestamp {
     pub fn second(&self) -> u32 {
         self.get_value(Self::SECONDS) * 2
     }
+
+    /// Convert this VFAT timestamp into seconds since the Unix epoch
+    /// (1970-01-01 00:00:00 UTC). This is the inverse of the
+    /// [`From<u64>`](VfatTimestamp) conversion.
+    pub fn to_unix_timestamp(&self) -> u64 {
+        let is_leap_year = |year| -> bool { (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 };
+        const SECONDS_IN_MINUTE: u64 = 60;
+        const SECONDS_IN_HOUR: u64 = 60 * SECONDS_IN_MINUTE;
+        const SECONDS_IN_DAY: u64 = 24 * SECONDS_IN_HOUR;
+
+        let year = self.year();
+        // Month/day are 1-based on disk; a fully-zeroed timestamp yields 0,
+        // which we treat as the first of January.
+        let month = self.month().max(1);
+        let day = self.day().max(1);
+
+        let mut days: u64 = 0;
+        for y in 1970..year {
+            days += if is_leap_year(y) { 366 } else { 365 };
+        }
+        let days_in_month = [
+            31,
+            28 + (is_leap_year(year) as u32),
+            31,
+            30,
+            31,
+            30,
+            31,
+            31,
+            30,
+            31,
+            30,
+            31,
+        ];
+        for m in 1..month {
+            days += days_in_month[(m - 1) as usize] as u64;
+        }
+        days += (day - 1) as u64;
+
+        days * SECONDS_IN_DAY
+            + self.hour() as u64 * SECONDS_IN_HOUR
+            + self.minute() as u64 * SECONDS_IN_MINUTE
+            + self.second() as u64
+    }
 }
 
 type UnixTimestamp = u64;
@@ -195,5 +239,33 @@ mod tests {
     #[test]
     fn test_vfattimestamp_from_unixtimestamp() {
         // TODO
+    }
+
+    #[test]
+    fn test_vfattimestamp_to_unix_roundtrip() {
+        // 2022-06-07 05:06:16 UTC -> seconds since epoch.
+        // Compute the expected value with the same calendar math the
+        // conversion uses, then ensure From<u64> round-trips back.
+        let mut timestamp = VfatTimestamp::new(0);
+        timestamp
+            .set_year(2022)
+            .set_value(6u32, VfatTimestamp::MONTH)
+            .set_value(7u32, VfatTimestamp::DAY)
+            .set_value(5u32, VfatTimestamp::HOURS)
+            .set_value(6u32, VfatTimestamp::MINUTES)
+            .set_seconds(16);
+
+        let unix = timestamp.to_unix_timestamp();
+        let back = VfatTimestamp::from(unix);
+        assert_eq!(back.year(), 2022);
+        assert_eq!(back.month(), 6);
+        assert_eq!(back.day(), 7);
+        assert_eq!(back.hour(), 5);
+        assert_eq!(back.minute(), 6);
+        assert_eq!(back.second(), 16);
+
+        // A zeroed timestamp maps to 1980-01-01 00:00:00.
+        let epoch_1980 = VfatTimestamp::new(0).to_unix_timestamp();
+        assert_eq!(epoch_1980, 315_532_800);
     }
 }

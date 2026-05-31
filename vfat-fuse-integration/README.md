@@ -27,7 +27,12 @@ and forwards the following operations to vfat-rs:
 * `setattr` — truncate or grow files (`size`); other attribute changes
   (permissions, ownership, explicit timestamps) are accepted but ignored, since
   FAT32 cannot represent them,
-* `open` / `opendir` / `flush` / `fsync` — stateless, always succeed.
+* `statfs` — report total/free space (in cluster-sized blocks) so `df` works,
+* `open` / `opendir` / `flush` / `fsync` / `release` — stateless, always succeed.
+
+Large sequential copies stay fast: consecutive contiguous `read`/`write` calls
+to the same file reuse a cached open handle (and its warm cluster-chain
+reader/writer), so a copy is O(size) rather than O(size²).
 
 The image is opened read/write, so the volume is mounted writable. Open the
 image read-only at the OS level (or keep a backup) if you want to avoid

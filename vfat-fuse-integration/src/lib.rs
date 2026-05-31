@@ -17,7 +17,7 @@ use std::time::{Duration, SystemTime};
 use fuser::{
     Errno, FileAttr, FileHandle, FileType, Filesystem, FopenFlags, Generation, INodeNo,
     KernelConfig, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry,
-    ReplyOpen, ReplyWrite, Request,
+    ReplyOpen, ReplyStatfs, ReplyWrite, Request,
 };
 use vfat_rs::io::SeekFrom;
 use vfat_rs::{Directory, VfatFS, VfatMetadataTrait, VfatRsError};
@@ -116,6 +116,11 @@ struct Inner {
     /// See [`OpenFile`]. Evicted before any operation that could change the
     /// file's cluster chain so a stale warm writer can never be reused.
     open_write: Option<OpenFile>,
+    /// A single file kept open to serve a run of contiguous sequential reads.
+    /// Mirrors [`Inner::open_write`] for the read path so reading a large file
+    /// back stays O(size) instead of O(size^2). Evicted whenever the file could
+    /// change underneath it.
+    open_read: Option<OpenFile>,
     /// uid/gid reported for every entry. FAT stores no ownership information, so
     /// the driver synthesises it from the user that mounted the filesystem,
     /// matching the behaviour of the kernel `vfat` driver's default.
@@ -132,6 +137,7 @@ impl Inner {
             fs,
             inodes: InodeTable::new(),
             open_write: None,
+            open_read: None,
             uid,
             gid,
         }
@@ -146,6 +152,19 @@ impl Inner {
     /// never write through a stale chain position.
     fn evict_open_write(&mut self) {
         self.open_write = None;
+    }
+
+    /// Drop any cached open read handle (and its warm `ClusterChainReader`).
+    fn evict_open_read(&mut self) {
+        self.open_read = None;
+    }
+
+    /// Drop both cached handles. Called before any operation that can change a
+    /// file's identity, size or cluster chain (create, delete, rename, truncate)
+    /// and on flush/release.
+    fn evict_open_handles(&mut self) {
+        self.open_write = None;
+        self.open_read = None;
     }
 
     /// Build a [`FileAttr`] for an entry, registering its inode if needed.
@@ -250,6 +269,20 @@ impl Inner {
 
     /// `read` implementation: read up to `size` bytes from `ino` at `offset`.
     fn read(&mut self, ino: u64, offset: u64, size: u32) -> Result<Vec<u8>, VfatRsError> {
+        // A read means we are not in the middle of a sequential write stream.
+        self.evict_open_write();
+
+        // Fast path: continue an already-open sequential read.
+        if let Some(open) = self.open_read.as_mut() {
+            if open.ino == ino && open.next_offset == offset {
+                let data = read_up_to(&mut open.file, size as usize)?;
+                open.next_offset += data.len() as u64;
+                return Ok(data);
+            }
+        }
+
+        // Slow path: (re)open the file from its path and seek to `offset`.
+        self.evict_open_read();
         let path = self.path_of(ino)?;
         let mut file =
             self.fs
@@ -259,18 +292,15 @@ impl Inner {
                     target: format!("inode {ino}"),
                 })?;
         file.seek(SeekFrom::Start(offset))?;
+        let data = read_up_to(&mut file, size as usize)?;
 
-        let mut buf = vec![0u8; size as usize];
-        let mut total = 0;
-        while total < buf.len() {
-            let read = file.read(&mut buf[total..])?;
-            if read == 0 {
-                break;
-            }
-            total += read;
-        }
-        buf.truncate(total);
-        Ok(buf)
+        // Keep the handle open so following contiguous reads hit the fast path.
+        self.open_read = Some(OpenFile {
+            ino,
+            file,
+            next_offset: offset + data.len() as u64,
+        });
+        Ok(data)
     }
 
     /// Resolve the directory behind `ino` or fail.
@@ -301,6 +331,10 @@ impl Inner {
     /// (and its warm cluster-chain writer) so a large sequential copy stays
     /// O(size) overall instead of O(size^2).
     fn write(&mut self, ino: u64, offset: u64, data: &[u8]) -> Result<u32, VfatRsError> {
+        // A write means we are not in the middle of a sequential read stream, and
+        // it changes the file, so any cached read handle is now stale.
+        self.evict_open_read();
+
         // Fast path: continue an already-open sequential write.
         if let Some(open) = self.open_write.as_mut() {
             if open.ino == ino && open.next_offset == offset {
@@ -346,7 +380,7 @@ impl Inner {
 
     /// `create` implementation: make an empty regular file `name` in `parent`.
     fn create(&mut self, parent: u64, name: &str) -> Result<FileAttr, VfatRsError> {
-        self.evict_open_write();
+        self.evict_open_handles();
         let child = self.path_of(parent)?.join(name);
         self.directory_of(parent)?.create_file(name.to_string())?;
         self.attr_for_path(child)
@@ -354,7 +388,7 @@ impl Inner {
 
     /// `mkdir` implementation: make an empty directory `name` in `parent`.
     fn mkdir(&mut self, parent: u64, name: &str) -> Result<FileAttr, VfatRsError> {
-        self.evict_open_write();
+        self.evict_open_handles();
         let child = self.path_of(parent)?.join(name);
         self.directory_of(parent)?
             .create_directory(name.to_string())?;
@@ -363,7 +397,7 @@ impl Inner {
 
     /// `unlink`/`rmdir` implementation: delete `name` from directory `parent`.
     fn delete(&mut self, parent: u64, name: &str) -> Result<(), VfatRsError> {
-        self.evict_open_write();
+        self.evict_open_handles();
         let child = self.path_of(parent)?.join(name);
         self.directory_of(parent)?.delete(name.to_string())?;
         self.inodes.remove_subtree(&child);
@@ -379,7 +413,7 @@ impl Inner {
         newparent: u64,
         newname: &str,
     ) -> Result<(), VfatRsError> {
-        self.evict_open_write();
+        self.evict_open_handles();
         let source = self.path_of(parent)?.join(name);
         let destination = self.path_of(newparent)?.join(newname);
         self.directory_of(parent)?
@@ -395,7 +429,7 @@ impl Inner {
     /// vfat-rs' `truncate` only shrinks, so growth is emulated by zero-filling
     /// from the old end of file up to the requested size.
     fn set_size(&mut self, ino: u64, size: u64) -> Result<FileAttr, VfatRsError> {
-        self.evict_open_write();
+        self.evict_open_handles();
         let path = self.path_of(ino)?;
         let mut file = self
             .fs
@@ -419,6 +453,32 @@ impl Inner {
         drop(file);
         self.attr_for_path(path)
     }
+
+    /// `statfs` implementation: report total/free space in cluster-sized blocks
+    /// so `df` and the kernel's free-space accounting work. Returns
+    /// `(total_blocks, free_blocks, block_size)`.
+    fn statfs(&self) -> Result<(u64, u64, u32), VfatRsError> {
+        let bsize = self.fs.bytes_per_cluster();
+        let blocks = self.fs.cluster_count() as u64;
+        let bfree = self.fs.count_free_clusters()? as u64;
+        Ok((blocks, bfree, bsize))
+    }
+}
+
+/// Read up to `size` bytes from `file` at its current position, looping over
+/// short reads until the buffer is full or end of file is reached.
+fn read_up_to(file: &mut vfat_rs::File, size: usize) -> Result<Vec<u8>, VfatRsError> {
+    let mut buf = vec![0u8; size];
+    let mut total = 0;
+    while total < buf.len() {
+        let read = file.read(&mut buf[total..])?;
+        if read == 0 {
+            break;
+        }
+        total += read;
+    }
+    buf.truncate(total);
+    Ok(buf)
 }
 
 /// Write the whole of `buf` to `file`, looping over short writes.
@@ -722,7 +782,7 @@ impl Filesystem for VfatFuse {
     ) {
         // Writes are flushed through to the device as they happen; close the
         // cached sequential-write handle so it cannot outlive the open file.
-        self.inner.lock().unwrap().evict_open_write();
+        self.inner.lock().unwrap().evict_open_handles();
         reply.ok();
     }
 
@@ -745,6 +805,33 @@ impl Filesystem for VfatFuse {
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
+        reply.ok();
+    }
+
+    fn statfs(&self, _req: &Request, _ino: INodeNo, reply: ReplyStatfs) {
+        let inner = self.inner.lock().unwrap();
+        match inner.statfs() {
+            Ok((blocks, bfree, bsize)) => {
+                // bavail == bfree (no reserved blocks); files/ffree unknown on FAT.
+                reply.statfs(blocks, bfree, bfree, 0, 0, bsize, 255, bsize);
+            }
+            Err(err) => reply.error(errno_of(&err)),
+        }
+    }
+
+    fn release(
+        &self,
+        _req: &Request,
+        _ino: INodeNo,
+        _fh: FileHandle,
+        _flags: fuser::OpenFlags,
+        _lock_owner: Option<fuser::LockOwner>,
+        _flush: bool,
+        reply: ReplyEmpty,
+    ) {
+        // The file is being closed: drop any cached read/write handle so it can
+        // never outlive the open file description.
+        self.inner.lock().unwrap().evict_open_handles();
         reply.ok();
     }
 }

@@ -690,4 +690,84 @@ mod hermetic {
         assert_eq!(read_all(&mut inner, a, 2048), vec![0xA1u8; 2048]);
         assert_eq!(read_all(&mut inner, b, 2048), vec![0xB1u8; 2048]);
     }
+
+    #[test]
+    fn contiguous_reads_reuse_open_read_handle() {
+        let mut inner = hermetic_inner();
+        let ino = inner.create(ROOT_INODE, "r.bin").unwrap().ino.0;
+
+        let total = 256 * 1024;
+        let data: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        inner.write(ino, 0, &data).unwrap();
+        // A write must not leave a read handle cached.
+        assert!(inner.open_read.is_none());
+
+        // Read back in 4 KiB chunks; each contiguous read keeps the handle warm.
+        let chunk = 4096u32;
+        let mut got = Vec::new();
+        while got.len() < total {
+            let off = got.len() as u64;
+            let part = inner.read(ino, off, chunk).unwrap();
+            assert!(!part.is_empty());
+            got.extend_from_slice(&part);
+            let open = inner
+                .open_read
+                .as_ref()
+                .expect("read handle should stay open across contiguous reads");
+            assert_eq!(open.ino, ino);
+            assert_eq!(open.next_offset, off + part.len() as u64);
+        }
+        assert_eq!(got, data);
+    }
+
+    #[test]
+    fn write_evicts_cached_read_handle() {
+        let mut inner = hermetic_inner();
+        let ino = inner.create(ROOT_INODE, "rw.bin").unwrap().ino.0;
+        inner.write(ino, 0, &[7u8; 8192]).unwrap();
+
+        // Prime the read cache.
+        let _ = inner.read(ino, 0, 4096).unwrap();
+        assert!(inner.open_read.is_some());
+
+        // A subsequent write must drop the stale read handle.
+        inner.write(ino, 8192, &[9u8; 4096]).unwrap();
+        assert!(
+            inner.open_read.is_none(),
+            "a write must evict the cached read handle"
+        );
+
+        let mut expected = vec![7u8; 8192];
+        expected.extend_from_slice(&[9u8; 4096]);
+        assert_eq!(read_all(&mut inner, ino, expected.len()), expected);
+    }
+
+    #[test]
+    fn statfs_reports_free_space_that_shrinks_on_write() {
+        let mut inner = hermetic_inner();
+        let (blocks, bfree0, bsize) = inner.statfs().unwrap();
+        assert!(blocks > 0 && bsize > 0);
+        assert!(bfree0 > 0 && bfree0 <= blocks);
+
+        // Writing 1 MiB must reduce the free-block count by exactly 1 MiB worth.
+        let ino = inner.create(ROOT_INODE, "fill.bin").unwrap().ino.0;
+        let one_mib = 1024 * 1024;
+        inner.write(ino, 0, &vec![1u8; one_mib]).unwrap();
+        inner.evict_open_handles();
+
+        let (_, bfree1, _) = inner.statfs().unwrap();
+        let used_blocks = bfree0 - bfree1;
+        assert_eq!(used_blocks, one_mib as u64 / bsize as u64);
+    }
+
+    #[test]
+    fn release_evicts_open_handles() {
+        let mut inner = hermetic_inner();
+        let ino = inner.create(ROOT_INODE, "rel.bin").unwrap().ino.0;
+        inner.write(ino, 0, &[1u8; 4096]).unwrap();
+        assert!(inner.open_write.is_some());
+        let _ = inner.read(ino, 0, 1024); // primes nothing (write path evicts read), but exercise
+        inner.evict_open_handles();
+        assert!(inner.open_write.is_none() && inner.open_read.is_none());
+    }
 }

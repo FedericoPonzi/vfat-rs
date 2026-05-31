@@ -26,7 +26,7 @@ HTML reports are generated in `target/criterion/`. CI runs benchmarks automatica
 
 ## Formal Verification
 
-Pure conversion logic is verified with [Kani](https://model-checking.github.io/kani/), a bit-precise Rust model checker. Install it once:
+Pure, panic-/overflow-sensitive logic is verified with [Kani](https://model-checking.github.io/kani/), a bit-precise Rust model checker. Install it once:
 
 ```bash
 cargo install --locked kani-verifier
@@ -39,7 +39,7 @@ Then run all proof harnesses:
 cargo kani
 ```
 
-Harnesses live in `src/kani_proofs.rs` and are gated behind `#[cfg(kani)]`, so they have no effect on regular `cargo build`/`cargo test`. They currently prove round-trip/masking invariants for `FatEntry` decoding and `ClusterId` high/low splitting. CI runs Kani on PRs and pushes to `master` (`.github/workflows/kani.yml`).
+Harnesses live in `src/kani_proofs.rs` and are gated behind `#[cfg(kani)]`, so they have no effect on regular `cargo build`/`cargo test`. They prove properties of logic that consumes untrusted on-disk values: the `defbit!` bitfield accessors (writing one packed field never corrupts a neighbour, plus decode/round-trip invariants), FAT-entry address arithmetic (`fat_entry_location` never panics and keeps the 4-byte read within the sector), and `FatEntry` decoding. CI runs Kani on PRs and pushes to `master` (`.github/workflows/kani.yml`).
 
 
 ### Some vfat related utilities

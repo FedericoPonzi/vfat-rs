@@ -82,7 +82,10 @@ macro_rules! defbit {
                 (self.0 & mask) >> (mask.trailing_zeros())
             }
 
-            #[inline(always)]
+            // Note: `mask` must be a non-zero field mask. `get_value`/`set_value`
+            // shift by `mask.trailing_zeros()`, which is the type width (and thus
+            // a shift-overflow panic) when `mask == 0`. All generated field masks
+            // are non-zero by construction.            #[inline(always)]
             pub fn set(&mut self, val: $size) -> &mut Self {
                 self.0 = val;
                 self

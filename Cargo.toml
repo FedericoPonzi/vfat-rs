@@ -14,6 +14,9 @@ categories = ["no-std", "filesystem", "embedded"]
 [profile.test]
 opt-level = 2
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
 [features]
 default = []
 std = ["snafu/std", "binrw/std", "chrono/std", "chrono/clock"]

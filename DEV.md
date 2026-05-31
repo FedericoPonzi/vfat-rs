@@ -24,6 +24,24 @@ This benchmarks file I/O (read/write/seek), directory operations (create/delete/
 HTML reports are generated in `target/criterion/`. CI runs benchmarks automatically on pushes to `master` (not on PRs).
 
 
+## Formal Verification
+
+Pure conversion logic is verified with [Kani](https://model-checking.github.io/kani/), a bit-precise Rust model checker. Install it once:
+
+```bash
+cargo install --locked kani-verifier
+cargo kani setup
+```
+
+Then run all proof harnesses:
+
+```bash
+cargo kani
+```
+
+Harnesses live in `src/kani_proofs.rs` and are gated behind `#[cfg(kani)]`, so they have no effect on regular `cargo build`/`cargo test`. They currently prove round-trip/masking invariants for `FatEntry` decoding and `ClusterId` high/low splitting. CI runs Kani on PRs and pushes to `master` (`.github/workflows/kani.yml`).
+
+
 ### Some vfat related utilities
 
 You can check whether the file contains a valid MBR via `gdisk`:

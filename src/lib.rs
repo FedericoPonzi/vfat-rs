@@ -41,6 +41,8 @@ mod fileblockdevice;
 mod formats;
 /// I/O traits and error types.
 pub mod io;
+#[cfg(kani)]
+mod kani_proofs;
 mod macros;
 /// Master Boot Record parsing.
 pub mod mbr;

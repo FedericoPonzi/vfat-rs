@@ -770,4 +770,88 @@ mod hermetic {
         inner.evict_open_handles();
         assert!(inner.open_write.is_none() && inner.open_read.is_none());
     }
+
+    #[test]
+    fn set_times_persists_mtime_and_crtime() {
+        use std::time::{Duration, SystemTime};
+
+        let mut inner = hermetic_inner();
+        let ino = inner.create(ROOT_INODE, "dated.txt").unwrap().ino.0;
+
+        // 2007-06-15 12:30:20 UTC (crtime) and 2021-04-23 08:15:00 UTC (mtime),
+        // both even seconds so they survive VFAT's 2-second resolution exactly.
+        let crtime = SystemTime::UNIX_EPOCH + Duration::from_secs(1_181_910_620);
+        let mtime = SystemTime::UNIX_EPOCH + Duration::from_secs(1_619_165_700);
+
+        let attr = inner
+            .set_times(
+                ino,
+                None,
+                Some(fuser::TimeOrNow::SpecificTime(mtime)),
+                Some(crtime),
+            )
+            .unwrap();
+        assert_eq!(attr.mtime, mtime, "returned attr mtime");
+        assert_eq!(attr.crtime, crtime, "returned attr crtime");
+
+        // Re-read from disk via getattr to confirm the entry was persisted.
+        let reread = inner.getattr(ino).unwrap();
+        assert_eq!(reread.mtime, mtime, "persisted mtime");
+        assert_eq!(reread.crtime, crtime, "persisted crtime");
+    }
+
+    #[test]
+    fn set_times_now_updates_to_recent_time() {
+        use std::time::{Duration, SystemTime};
+
+        let mut inner = hermetic_inner();
+        let ino = inner.create(ROOT_INODE, "touched.txt").unwrap().ino.0;
+
+        let before = SystemTime::now() - Duration::from_secs(4);
+        let attr = inner
+            .set_times(ino, None, Some(fuser::TimeOrNow::Now), None)
+            .unwrap();
+
+        // `Now` must resolve to a real recent time, not the 1970 epoch.
+        assert!(
+            attr.mtime >= before,
+            "mtime {:?} should be at/after {:?}",
+            attr.mtime,
+            before
+        );
+        assert!(attr.mtime > SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000));
+    }
+
+    #[test]
+    fn set_times_atime_only_does_not_change_mtime() {
+        use std::time::{Duration, SystemTime};
+
+        let mut inner = hermetic_inner();
+        let ino = inner.create(ROOT_INODE, "atime.txt").unwrap().ino.0;
+
+        // Pin a known mtime first.
+        let mtime = SystemTime::UNIX_EPOCH + Duration::from_secs(1_619_165_700);
+        inner
+            .set_times(ino, None, Some(fuser::TimeOrNow::SpecificTime(mtime)), None)
+            .unwrap();
+
+        // An atime-only request (e.g. `touch -a`) must leave mtime untouched: FAT
+        // has no last-access time, so this is a no-op for the on-disk entry.
+        let far_future = SystemTime::UNIX_EPOCH + Duration::from_secs(4_000_000_000);
+        let attr = inner
+            .set_times(
+                ino,
+                Some(fuser::TimeOrNow::SpecificTime(far_future)),
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            attr.mtime, mtime,
+            "atime-only setattr must not change mtime"
+        );
+
+        let reread = inner.getattr(ino).unwrap();
+        assert_eq!(reread.mtime, mtime, "persisted mtime must be unchanged");
+    }
 }

@@ -454,6 +454,39 @@ impl Inner {
         self.attr_for_path(path)
     }
 
+    /// Persist explicit creation/modification timestamps for `ino`.
+    ///
+    /// `crtime` maps to the FAT creation timestamp; `mtime` to the
+    /// last-modification timestamp. FAT has no last-access *time* (only a date,
+    /// which vfat-rs does not model) and no change-time, so `atime` is accepted
+    /// but ignored — an `atime`-only request (e.g. `touch -a`) must NOT clobber
+    /// the modification time. A `None` for everything representable is a no-op.
+    fn set_times(
+        &mut self,
+        ino: u64,
+        _atime: Option<fuser::TimeOrNow>,
+        mtime: Option<fuser::TimeOrNow>,
+        crtime: Option<SystemTime>,
+    ) -> Result<FileAttr, VfatRsError> {
+        let modification = mtime.map(vfat_timestamp_of);
+        let creation = crtime.map(vfat_timestamp);
+
+        if modification.is_none() && creation.is_none() {
+            return self.getattr(ino);
+        }
+
+        self.evict_open_handles();
+        let path = self.path_of(ino)?;
+        let entry = self.fs.get_from_absolute_path(path.clone())?;
+        // Directories have no timestamp setter in vfat-rs yet; for them we accept
+        // the request but leave the on-disk entry unchanged (as before).
+        if let Some(mut file) = entry.into_file() {
+            file.set_timestamps(creation, modification)?;
+            drop(file);
+        }
+        self.attr_for_path(path)
+    }
+
     /// `statfs` implementation: report total/free space in cluster-sized blocks
     /// so `df` and the kernel's free-space accounting work. Returns
     /// `(total_blocks, free_blocks, block_size)`.
@@ -502,9 +535,34 @@ fn not_found(ino: u64) -> VfatRsError {
     }
 }
 
+/// Result of a `setattr` sub-operation: either a vfat-rs error or a request that
+/// exceeds FAT32's 32-bit size limit (mapped to `EFBIG`).
+enum SetattrError {
+    TooBig,
+    Vfat(VfatRsError),
+}
+
 /// Convert a VFAT on-disk timestamp into a [`SystemTime`].
 fn system_time(ts: vfat_rs::VfatTimestamp) -> SystemTime {
     SystemTime::UNIX_EPOCH + Duration::from_secs(ts.to_unix_timestamp())
+}
+
+/// Convert a [`SystemTime`] into a VFAT timestamp (seconds since the Unix epoch,
+/// clamped at the epoch for pre-1970 inputs). VFAT has 2-second resolution.
+fn vfat_timestamp(st: SystemTime) -> vfat_rs::VfatTimestamp {
+    let secs = st
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    vfat_rs::VfatTimestamp::from(secs)
+}
+
+/// Resolve a FUSE [`TimeOrNow`](fuser::TimeOrNow) into a VFAT timestamp.
+fn vfat_timestamp_of(t: fuser::TimeOrNow) -> vfat_rs::VfatTimestamp {
+    match t {
+        fuser::TimeOrNow::SpecificTime(st) => vfat_timestamp(st),
+        fuser::TimeOrNow::Now => vfat_timestamp(SystemTime::now()),
+    }
 }
 
 /// Map a vfat-rs error to a FUSE errno for the reply layer.
@@ -646,27 +704,41 @@ impl Filesystem for VfatFuse {
         _uid: Option<u32>,
         _gid: Option<u32>,
         size: Option<u64>,
-        _atime: Option<fuser::TimeOrNow>,
-        _mtime: Option<fuser::TimeOrNow>,
+        atime: Option<fuser::TimeOrNow>,
+        mtime: Option<fuser::TimeOrNow>,
         _ctime: Option<SystemTime>,
         _fh: Option<FileHandle>,
-        _crtime: Option<SystemTime>,
+        crtime: Option<SystemTime>,
         _chgtime: Option<SystemTime>,
         _bkuptime: Option<SystemTime>,
         _flags: Option<fuser::BsdFileFlags>,
         reply: ReplyAttr,
     ) {
         let mut inner = self.inner.lock().unwrap();
-        // Only a size change is meaningful on FAT32; permission/owner/timestamp
-        // changes are accepted but ignored, so chmod/chown/touch do not fail.
-        let result = match size {
-            Some(size) if size > u32::MAX as u64 => return reply.error(Errno::EFBIG),
-            Some(size) => inner.set_size(ino.0, size),
-            None => inner.getattr(ino.0),
-        };
+        // On FAT32 only the size and the creation/modification timestamps are
+        // representable; permission/owner changes are accepted but ignored so
+        // chmod/chown do not fail. A size change is applied first, then any
+        // explicit timestamps (touch / cp -p).
+        let result = (|| {
+            if let Some(size) = size {
+                if size > u32::MAX as u64 {
+                    return Err(SetattrError::TooBig);
+                }
+                inner.set_size(ino.0, size).map_err(SetattrError::Vfat)?;
+            }
+            if atime.is_none() && mtime.is_none() && crtime.is_none() {
+                // Nothing timestamp-related to apply; return the current attr
+                // (already refreshed by set_size above, if any).
+                return inner.getattr(ino.0).map_err(SetattrError::Vfat);
+            }
+            inner
+                .set_times(ino.0, atime, mtime, crtime)
+                .map_err(SetattrError::Vfat)
+        })();
         match result {
             Ok(attr) => reply.attr(&TTL, &attr),
-            Err(err) => reply.error(errno_of(&err)),
+            Err(SetattrError::TooBig) => reply.error(Errno::EFBIG),
+            Err(SetattrError::Vfat(err)) => reply.error(errno_of(&err)),
         }
     }
 

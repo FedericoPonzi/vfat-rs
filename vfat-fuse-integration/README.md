@@ -24,9 +24,10 @@ and forwards the following operations to vfat-rs:
 * `create` / `mkdir` — create files and directories,
 * `unlink` / `rmdir` — remove files and (empty) directories,
 * `rename` — rename/move entries,
-* `setattr` — truncate or grow files (`size`); other attribute changes
-  (permissions, ownership, explicit timestamps) are accepted but ignored, since
-  FAT32 cannot represent them,
+* `setattr` — truncate or grow files (`size`) and persist the creation/modification
+  timestamps (`touch`, `cp -p`); the on-disk entries use VFAT's 2-second
+  resolution. Permission/ownership changes are accepted but ignored, since FAT32
+  cannot represent them, and directory timestamps are not yet updatable,
 * `statfs` — report total/free space (in cluster-sized blocks) so `df` works,
 * `open` / `opendir` / `flush` / `fsync` / `release` — stateless, always succeed.
 
@@ -54,8 +55,10 @@ files.
   the destination file present at a partial size; remove it to recover the
   space. There is no automatic rollback that frees the partial allocation on
   failure.
-* **Explicit timestamps and ownership/permissions are not persisted** — see the
-  `setattr` note above; FAT32 has no on-disk representation for them.
+* **Ownership, permissions, and directory timestamps are not persisted** — FAT32
+  has no on-disk representation for ownership/permissions (see the `setattr` note
+  above), and vfat-rs does not yet expose a setter for directory timestamps, so
+  only *file* creation/modification times are written back.
 
 ## Building
 

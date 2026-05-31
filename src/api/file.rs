@@ -33,6 +33,16 @@ pub struct File {
     /// handle concurrently is unsupported (this already holds for the cached
     /// `metadata` today).
     writer: Option<(usize, ClusterChainWriter)>,
+    /// A `ClusterChainReader` kept warm across sequential reads.
+    ///
+    /// Mirrors [`File::writer`] for the read path: building a reader and seeking
+    /// it to a byte offset walks the cluster chain from the start of the file, so
+    /// doing it on every read makes a sequential scan quadratic in the file size.
+    /// When the next read continues exactly where the previous one stopped we
+    /// reuse the reader, which is already positioned there. The stored `usize` is
+    /// the byte offset the reader is currently positioned at. Cleared on `seek`,
+    /// `truncate`, and when the first cluster is allocated.
+    reader: Option<(usize, crate::cluster::cluster_reader::ClusterChainReader)>,
 }
 impl fmt::Debug for File {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -52,6 +62,7 @@ impl File {
             metadata,
             offset: 0,
             writer: None,
+            reader: None,
         }
     }
     /// Returns a reference to this file's [`Metadata`].
@@ -110,6 +121,7 @@ impl File {
             self.update_metadata()?;
             // The just-allocated cluster invalidates any previously cached writer.
             self.writer = None;
+            self.reader = None;
         }
 
         // Reuse the warm writer if it is positioned exactly at the current offset,
@@ -160,6 +172,7 @@ impl File {
         let _guard = lock.write();
         // Any explicit seek breaks the sequential-write fast path.
         self.writer = None;
+        self.reader = None;
         match pos {
             SeekFrom::Start(val) => {
                 self.offset = val as usize;
@@ -212,11 +225,17 @@ impl File {
             );
             return Ok(0);
         }
-        let mut ccr = self
-            .vfat_filesystem
-            .cluster_chain_reader(self.metadata.cluster);
-        info!("Going to seek to:{}", self.offset);
-        ccr.seek(self.offset)?;
+        let mut ccr = match self.reader.take() {
+            Some((pos, reader)) if pos == self.offset => reader,
+            _ => {
+                let mut reader = self
+                    .vfat_filesystem
+                    .cluster_chain_reader(self.metadata.cluster);
+                info!("Going to seek to:{}", self.offset);
+                reader.seek(self.offset)?;
+                reader
+            }
+        };
 
         info!(
             "File: Clusterid: {} amount to read: {}, file size: {}",
@@ -225,6 +244,9 @@ impl File {
         buf = &mut buf[..amount_to_read];
         let amount_read = ccr.read(buf)?;
         self.offset += amount_read;
+        // The reader is now positioned at `self.offset`; keep it warm for the next
+        // sequential read.
+        self.reader = Some((self.offset, ccr));
         Ok(amount_read)
     }
 
@@ -247,6 +269,7 @@ impl File {
 
         // Freeing clusters can make a cached writer point at a released cluster.
         self.writer = None;
+        self.reader = None;
 
         if new_size == 0 {
             if !self.metadata.has_no_cluster_allocated() {

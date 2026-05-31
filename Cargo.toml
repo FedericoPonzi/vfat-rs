@@ -37,6 +37,7 @@ env_logger = "~0.11"
 rand = "~0.10"
 chrono = "~0.4"
 criterion = { version = "0.8", features = ["html_reports"] }
+fatfs = "0.3"
 
 [[bench]]
 name = "file_io"

@@ -5,6 +5,7 @@ use core::{cmp, fmt};
 use log::{debug, info};
 
 use crate::api::Metadata;
+use crate::cluster::cluster_writer::ClusterChainWriter;
 use crate::{ClusterId, PathBuf, Result, VfatFS, VfatMetadataTrait};
 
 /// A File representation in a VfatFilesystem.
@@ -15,6 +16,23 @@ pub struct File {
     // Current Seek position
     /// Current seek offset in bytes from the start of the file.
     pub offset: usize,
+    /// A `ClusterChainWriter` kept warm across sequential writes.
+    ///
+    /// Building a writer and seeking it to a byte offset walks the cluster chain
+    /// from the start of the file (one FAT lookup per cluster), so doing it on
+    /// every write makes a sequential copy quadratic in the file size. When the
+    /// next write continues exactly where the previous one stopped we reuse the
+    /// writer, which is already positioned there, turning the common
+    /// append/sequential-write path into O(1) per write. The stored `usize` is
+    /// the byte offset the writer is currently positioned at.
+    ///
+    /// The cache is only valid for this handle's own sequential use: it is
+    /// cleared on `seek`, on `truncate`, and when the first cluster is allocated.
+    /// Like a POSIX file descriptor, a `File` assumes exclusive access to its own
+    /// cluster chain while open; mutating the same on-disk entry through a second
+    /// handle concurrently is unsupported (this already holds for the cached
+    /// `metadata` today).
+    writer: Option<(usize, ClusterChainWriter)>,
 }
 impl fmt::Debug for File {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -33,6 +51,7 @@ impl File {
             vfat_filesystem,
             metadata,
             offset: 0,
+            writer: None,
         }
     }
     /// Returns a reference to this file's [`Metadata`].
@@ -89,12 +108,23 @@ impl File {
                 self.metadata.cluster
             );
             self.update_metadata()?;
+            // The just-allocated cluster invalidates any previously cached writer.
+            self.writer = None;
         }
-        let mut ccw = self
-            .vfat_filesystem
-            .cluster_chain_writer(self.metadata.cluster);
 
-        ccw.seek(self.offset)?;
+        // Reuse the warm writer if it is positioned exactly at the current offset,
+        // otherwise build a fresh one and seek it (walking the chain from the start).
+        let mut ccw = match self.writer.take() {
+            Some((pos, writer)) if pos == self.offset => writer,
+            _ => {
+                let mut writer = self
+                    .vfat_filesystem
+                    .cluster_chain_writer(self.metadata.cluster);
+                writer.seek(self.offset)?;
+                writer
+            }
+        };
+
         info!(
             "{:?}: Writing with initial cluster: {}, offset: {}",
             self.full_path(),
@@ -109,6 +139,9 @@ impl File {
         );
         self.update_file_size(amount_written)?;
         self.offset += amount_written;
+        // The writer is now positioned at `self.offset`; keep it warm for the next
+        // sequential write.
+        self.writer = Some((self.offset, ccw));
 
         Ok(amount_written)
     }
@@ -125,6 +158,8 @@ impl File {
     pub fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         let lock = self.vfat_filesystem.fs_lock.clone();
         let _guard = lock.write();
+        // Any explicit seek breaks the sequential-write fast path.
+        self.writer = None;
         match pos {
             SeekFrom::Start(val) => {
                 self.offset = val as usize;
@@ -209,6 +244,9 @@ impl File {
         if new_size >= self.metadata.size {
             return Ok(());
         }
+
+        // Freeing clusters can make a cached writer point at a released cluster.
+        self.writer = None;
 
         if new_size == 0 {
             if !self.metadata.has_no_cluster_allocated() {

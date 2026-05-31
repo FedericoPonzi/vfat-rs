@@ -77,10 +77,12 @@ impl VfatTimestamp {
         const SECONDS_IN_DAY: u64 = 24 * SECONDS_IN_HOUR;
 
         let year = self.year();
-        // Month/day are 1-based on disk; a fully-zeroed timestamp yields 0,
-        // which we treat as the first of January.
-        let month = self.month().max(1);
-        let day = self.day().max(1);
+        // Month/day are 1-based on disk. Corrupted directory entries can hold
+        // out-of-range values (the month field is 4 bits, so up to 15), which
+        // must never panic the caller (e.g. crash the FUSE driver on `ls`).
+        // Clamp into the valid range; a fully-zeroed timestamp becomes Jan 1.
+        let month = self.month().clamp(1, 12);
+        let day = self.day().clamp(1, 31);
 
         let mut days: u64 = 0;
         for y in 1970..year {
@@ -267,5 +269,23 @@ mod tests {
         // A zeroed timestamp maps to 1980-01-01 00:00:00.
         let epoch_1980 = VfatTimestamp::new(0).to_unix_timestamp();
         assert_eq!(epoch_1980, 315_532_800);
+    }
+
+    /// A corrupted directory entry can store an out-of-range month (the field
+    /// is 4 bits, so up to 15) or day. `to_unix_timestamp` must clamp these
+    /// instead of panicking with an out-of-bounds array index, which would
+    /// otherwise crash the FUSE driver thread when listing a corrupted dir.
+    #[test]
+    fn test_to_unix_timestamp_clamps_corrupted_month_and_day() {
+        for month in 13u32..=15 {
+            for day in [0u32, 31, 32, 63] {
+                let mut ts = VfatTimestamp::new(0);
+                ts.set_value(50u32, VfatTimestamp::YEAR) // 2030
+                    .set_value(month, VfatTimestamp::MONTH)
+                    .set_value(day, VfatTimestamp::DAY);
+                // Must not panic; just return some value.
+                let _ = ts.to_unix_timestamp();
+            }
+        }
     }
 }

@@ -297,6 +297,13 @@ impl VfatFS {
                     let entry = FatEntry::new_ref(bytes);
                     let cid = ENTRIES_PER_SECTOR as u32 * i + id as u32;
                     trace!("(cid: {:?}) Fat entry: {:?}", entry, cid);
+                    // Clusters 0 and 1 are reserved and must never be allocated,
+                    // even if their FAT entries happen to read as unused on a
+                    // corrupted filesystem. Cluster 0 in particular maps to the
+                    // same sector as the root directory.
+                    if cid < 2 {
+                        continue;
+                    }
                     if let FatEntry::Unused = entry {
                         debug!("Found an unused cluster with id: {}", cid);
                         return Ok(Some(ClusterId::new(cid)));
@@ -331,6 +338,12 @@ impl VfatFS {
     pub(crate) fn allocate_cluster_to_chain(&self, head: ClusterId) -> Result<ClusterId> {
         info!("Allocating cluster to chain: {}", head);
         debug!("Head cluster: {}", head);
+        ensure!(
+            u32::from(head) >= 2,
+            error::FilesystemCorruptedSnafu {
+                reason: "Attempted to extend a chain starting at a reserved cluster (id < 2)"
+            }
+        );
         let tail_cluster_id = self.get_last_cluster_in_chain(head)?;
         debug!("Tail cluster: {}", tail_cluster_id);
 
@@ -634,13 +647,16 @@ mod test {
     #[test]
     fn test_find_next_free() {
         let mut ret = Vec::new();
-        // Reserved entry:
+        // Reserved entries 0 and 1 are free-looking (0x00) but must be skipped.
+        ret.extend_from_slice(&[0x00; FAT_ENTRY_SIZE]);
+        ret.extend_from_slice(&[0x00; FAT_ENTRY_SIZE]);
+        // Cluster 2: in-use.
         ret.extend_from_slice(&[0x01; FAT_ENTRY_SIZE]);
-        // Free entry:
+        // Cluster 3: free -> this is the first allocatable cluster.
         ret.extend_from_slice(&[0x00; FAT_ENTRY_SIZE]);
 
-        // Complete the sector:
-        ret.extend_from_slice(&[0x01; 512 - (FAT_ENTRY_SIZE * 2)]);
+        // Complete the sector with in-use entries:
+        ret.extend_from_slice(&[0x01; 512 - (FAT_ENTRY_SIZE * 4)]);
 
         let dev = ArrayBackedBlockDevice {
             arr: ret,
@@ -671,9 +687,11 @@ mod test {
             last_alloc_hint: Arc::new(SpinMutex::new(0)),
             fsinfo_sector: None,
         };
+        // Reserved clusters 0 and 1 must never be returned, even though their
+        // FAT entries read as unused; the first allocatable cluster is 3.
         assert_eq!(
             vfat.find_free_cluster().unwrap().unwrap(),
-            ClusterId::new(1)
+            ClusterId::new(3)
         );
     }
 }

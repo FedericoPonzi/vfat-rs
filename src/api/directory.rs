@@ -126,6 +126,8 @@ impl Directory {
             metadata.cluster,
             Self::attributes_from_entry(&entry_type),
             metadata.size,
+            metadata.created(),
+            metadata.modified(),
             &existing_short_names,
         )?;
         let entries_len = entries.len();
@@ -599,6 +601,8 @@ impl Directory {
             metadata.cluster,
             attributes,
             metadata.size,
+            metadata.created(),
+            metadata.modified(),
             &existing_short_names,
         )?;
         let entries_len = entries.len();
@@ -688,6 +692,8 @@ impl Directory {
             metadata.cluster,
             attributes,
             metadata.size,
+            metadata.created(),
+            metadata.modified(),
             &existing_short_names,
         )?;
         let entries_len = entries.len();

@@ -20,6 +20,16 @@ pub(crate) fn delete_cluster_chain(
     start: ClusterId,
     device: ArcMutex<CachedPartition>,
 ) -> Result<()> {
+    // Clusters 0 and 1 are reserved (FAT[0] is the media descriptor, FAT[1] is
+    // the end-of-chain marker). A cluster id of 0 also means "no cluster
+    // allocated" (e.g. an empty file). Freeing these would corrupt the reserved
+    // FAT entries, after which the allocator could hand out cluster 0 — which
+    // maps to the same sector as the root directory — and a subsequent write
+    // would overwrite the root directory. Treat it as a no-op.
+    if u32::from(start) < 2 {
+        return Ok(());
+    }
+
     // Phase 1: collect the full chain.
     let mut chain = Vec::new();
     let mut current = start;
@@ -58,6 +68,12 @@ pub(crate) fn truncate_cluster_chain(
 ) -> Result<()> {
     if keep_count == 0 {
         return delete_cluster_chain(start, device);
+    }
+
+    // Reserved clusters (0/1) are never a valid chain start; cluster 0 also
+    // means "no cluster allocated". Nothing to truncate.
+    if u32::from(start) < 2 {
+        return Ok(());
     }
 
     // Walk the chain to find the last cluster to keep and collect the tail to free.
@@ -537,5 +553,50 @@ mod tests {
             CrashSimDevice::get_entry(&fat_sector, 6),
             FatEntry::LastCluster(_)
         ));
+    }
+
+    /// Regression test: deleting an "empty" file (cluster id 0), or otherwise
+    /// passing a reserved cluster id (0 or 1) to `delete_cluster_chain`, must
+    /// NOT modify the reserved FAT entries. Zeroing FAT[0] previously let the
+    /// allocator hand out cluster 0 for the next write, which maps to the root
+    /// directory sector and corrupted the directory.
+    #[test]
+    fn test_delete_cluster_chain_ignores_reserved_clusters() {
+        let fat_sector = Arc::new(SpinMutex::new([0u8; 512]));
+        let writes_before_crash = Arc::new(SpinMutex::new(None));
+
+        // Reserved entries as written by mkfs on FAT32.
+        CrashSimDevice::set_entry(&fat_sector, 0, FatEntry::LastCluster(0x0FFFFFF8));
+        CrashSimDevice::set_entry(&fat_sector, 1, FatEntry::LastCluster(0x0FFFFFFF));
+
+        let device = CrashSimDevice::new(fat_sector.clone(), writes_before_crash.clone());
+        let cached = Arc::new(CachedPartition::new(
+            device,
+            512,
+            SectorId(0),
+            1,
+            SectorId(100),
+            1,
+            1,
+        ));
+
+        // Deleting the chain of an empty file (cluster 0) must be a no-op.
+        delete_cluster_chain(ClusterId::new(0), cached.clone()).unwrap();
+        delete_cluster_chain(ClusterId::new(1), cached).unwrap();
+
+        assert!(
+            matches!(
+                CrashSimDevice::get_entry(&fat_sector, 0),
+                FatEntry::LastCluster(_)
+            ),
+            "FAT[0] (media descriptor) must not be cleared"
+        );
+        assert!(
+            matches!(
+                CrashSimDevice::get_entry(&fat_sector, 1),
+                FatEntry::LastCluster(_)
+            ),
+            "FAT[1] (end-of-chain marker) must not be cleared"
+        );
     }
 }

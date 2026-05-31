@@ -240,6 +240,8 @@ impl VfatDirectoryEntry {
         cluster_id: ClusterId,
         attributes: Attributes,
         file_size: u32,
+        creation_time: VfatTimestamp,
+        last_modification_time: VfatTimestamp,
         existing_short_names: &[[u8; 8]],
     ) -> crate::error::Result<Vec<UnknownDirectoryEntry>> {
         const MAX_LFN_NAME_LEN: usize = 255;
@@ -274,10 +276,10 @@ impl VfatDirectoryEntry {
             attributes,
             _reseverd_win_nt: 0,
             creation_millis: Default::default(),
-            creation_time: VfatTimestamp::new(1385663476),
+            creation_time,
             last_access_date: 0,
             high_16bits: high_cluster_id,
-            last_modification_time: VfatTimestamp::new(1385663476),
+            last_modification_time,
             low_16bits: low_cluster_id,
             file_size,
         };
@@ -353,6 +355,7 @@ mod test {
     use crate::api::raw_directory_entry::{
         LongFileNameEntry, RegularDirectoryEntry, VfatDirectoryEntry,
     };
+    use crate::api::timestamp::VfatTimestamp;
 
     fn init() {
         unsafe { std::env::set_var("RUST_LOG", "debug") };
@@ -391,6 +394,8 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             0,
+            VfatTimestamp::new(0),
+            VfatTimestamp::new(0),
             &[],
         )
         .unwrap();
@@ -426,6 +431,8 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             0,
+            VfatTimestamp::new(0),
+            VfatTimestamp::new(0),
             &[],
         )
         .unwrap();
@@ -510,6 +517,8 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             0,
+            VfatTimestamp::new(0),
+            VfatTimestamp::new(0),
             &existing,
         )
         .unwrap();
@@ -529,6 +538,8 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             0,
+            VfatTimestamp::new(0),
+            VfatTimestamp::new(0),
             &[],
         )
         .unwrap();
@@ -546,6 +557,8 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             0,
+            VfatTimestamp::new(0),
+            VfatTimestamp::new(0),
             &[],
         );
         assert!(result.is_err());
@@ -568,6 +581,8 @@ mod test {
             ClusterId::new(0),
             Attributes::new_directory(),
             0,
+            VfatTimestamp::new(0),
+            VfatTimestamp::new(0),
             &[],
         );
         assert!(result.is_ok());
@@ -584,6 +599,8 @@ mod test {
             ClusterId::new(3),
             Attributes::new_directory(),
             4321,
+            VfatTimestamp::new(0),
+            VfatTimestamp::new(0),
             &[],
         )
         .unwrap();
@@ -591,5 +608,31 @@ mod test {
             .into_regular()
             .unwrap();
         assert_eq!({ regular.file_size }, 4321);
+    }
+
+    #[test]
+    fn test_new_vfat_entry_sets_timestamps() {
+        init();
+        // Regression test: `new_vfat_entry` used to hard-code the creation and
+        // modification timestamps to a fixed constant (which decoded to 2021),
+        // so files created through the API never reflected the current time.
+        // The supplied timestamps must be written into the regular entry.
+        let creation = VfatTimestamp::from(1_700_000_000u64); // 2023-11-14
+        let modification = VfatTimestamp::from(1_710_000_000u64); // 2024-03-09
+        let entries = VfatDirectoryEntry::new_vfat_entry(
+            "data.bin",
+            ClusterId::new(3),
+            Attributes::new_directory(),
+            0,
+            creation,
+            modification,
+            &[],
+        )
+        .unwrap();
+        let regular: RegularDirectoryEntry = VfatDirectoryEntry::from(entries.last().unwrap())
+            .into_regular()
+            .unwrap();
+        assert_eq!({ regular.creation_time }, creation);
+        assert_eq!({ regular.last_modification_time }, modification);
     }
 }

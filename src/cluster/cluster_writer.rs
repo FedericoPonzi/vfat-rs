@@ -78,10 +78,10 @@ impl ClusterChainWriter {
             return Ok(0);
         }
 
-        assert_ne!(
-            self.current_cluster,
-            ClusterId::new(0),
-            "current cluster is ClusterId(0)."
+        assert!(
+            u32::from(self.current_cluster) >= 2,
+            "current cluster is reserved (ClusterId < 2): {:?}",
+            self.current_cluster
         );
 
         let mut amount = 0;

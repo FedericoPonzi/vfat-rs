@@ -64,6 +64,9 @@ pub struct VfatFS {
     last_alloc_hint: Arc<SpinMutex<u32>>,
     /// Sector number of the FSInfo sector (absolute), or `None` if not present.
     fsinfo_sector: Option<SectorId>,
+    /// Total number of addressable data clusters in the volume (cluster ids
+    /// `2..2 + total_clusters`). Used for free-space reporting (`statfs`).
+    total_clusters: u32,
 }
 
 impl fmt::Debug for VfatFS {
@@ -186,11 +189,18 @@ impl VfatFS {
         let fat_start_sector =
             (partition_start_sector + full_ebpb.bpb.reserved_sectors as u32).into();
         let fats_total_size = full_ebpb.extended.sectors_per_fat * full_ebpb.bpb.fat_amount as u32;
-        let data_start_sector =
+        let data_start_sector: SectorId =
             fat_start_sector + fats_total_size + full_ebpb.sectors_occupied_by_all_fats();
 
         let sectors_per_cluster = full_ebpb.bpb.sectors_per_cluster as u32;
         let root_cluster = ClusterId::new(full_ebpb.extended.root_cluster);
+
+        // Number of addressable data clusters, for free-space reporting.
+        let data_sectors = full_ebpb
+            .total_logical_sectors()
+            .saturating_sub(data_start_sector.0.saturating_sub(partition_start_sector));
+        let total_clusters = data_sectors / sectors_per_cluster;
+
         let eoc_marker = Self::read_end_of_chain_marker(&mut device, fat_start_sector)?;
         let sector_size = device.sector_size();
         let fat_amount = full_ebpb.bpb.fat_amount;
@@ -227,6 +237,7 @@ impl VfatFS {
             fs_lock: Arc::new(RwLock::new(())),
             last_alloc_hint: Arc::new(SpinMutex::new(alloc_hint)),
             fsinfo_sector: fsinfo_abs_sector,
+            total_clusters,
         })
     }
 
@@ -274,6 +285,18 @@ impl VfatFS {
         let hint_sector = hint / ENTRIES_PER_SECTOR as u32;
         let hint_offset = hint as usize % ENTRIES_PER_SECTOR;
 
+        // Never hand out a cluster id beyond the data area. A FAT is rounded up to
+        // a whole number of sectors, so its last sector can contain "slack"
+        // entries that read as unused (0) but map to sectors past the end of the
+        // volume. Allocating one would corrupt the filesystem / write out of
+        // bounds. `total_clusters == 0` means "unknown" (test constructors), in
+        // which case we keep the historical unbounded behaviour.
+        let last_valid_cid = if self.total_clusters == 0 {
+            u32::MAX
+        } else {
+            2u32.saturating_add(self.total_clusters)
+        };
+
         // Scan from hint_sector..end, then 0..hint_sector (wrap-around).
         for pass in 0..2u32 {
             let (start, end) = if pass == 0 {
@@ -300,8 +323,9 @@ impl VfatFS {
                     // Clusters 0 and 1 are reserved and must never be allocated,
                     // even if their FAT entries happen to read as unused on a
                     // corrupted filesystem. Cluster 0 in particular maps to the
-                    // same sector as the root directory.
-                    if cid < 2 {
+                    // same sector as the root directory. Cluster ids at or beyond
+                    // `last_valid_cid` are FAT slack past the data area (see above).
+                    if cid < 2 || cid >= last_valid_cid {
                         continue;
                     }
                     if let FatEntry::Unused = entry {
@@ -403,9 +427,41 @@ impl VfatFS {
     }
 
     /// Returns the number of bytes per cluster.
-    pub(crate) fn bytes_per_cluster(&self) -> u32 {
+    pub fn bytes_per_cluster(&self) -> u32 {
         let device = self.device.clone();
         device.sectors_per_cluster * device.sector_size as u32
+    }
+
+    /// Total number of addressable data clusters in the volume.
+    pub fn cluster_count(&self) -> u32 {
+        self.total_clusters
+    }
+
+    /// Count how many data clusters are currently free (unused) by scanning the
+    /// FAT. Only cluster ids `2..2 + cluster_count()` are considered, so trailing
+    /// slack entries in the last FAT sector are never miscounted as free space.
+    pub fn count_free_clusters(&self) -> Result<u32> {
+        let _guard = self.fs_lock.read();
+        const ENTRIES_PER_SECTOR: usize = SECTOR_SIZE / FAT_ENTRY_SIZE;
+        const BUF_SIZE: usize = FAT_ENTRY_SIZE * ENTRIES_PER_SECTOR;
+
+        let last_valid_cid = 2u32.saturating_add(self.total_clusters);
+        let mut free = 0u32;
+        for i in 0..self.sectors_per_fat {
+            let mut buf = [0u8; BUF_SIZE];
+            self.device
+                .read_sector(self.fat_start_sector + i, &mut buf)?;
+            for (id, bytes) in buf.chunks(FAT_ENTRY_SIZE).enumerate() {
+                let cid = ENTRIES_PER_SECTOR as u32 * i + id as u32;
+                if cid < 2 || cid >= last_valid_cid {
+                    continue;
+                }
+                if let FatEntry::Unused = FatEntry::new_ref(bytes) {
+                    free += 1;
+                }
+            }
+        }
+        Ok(free)
     }
 
     /// Write the current allocation hint back to the FSInfo sector on disk.
@@ -630,6 +686,7 @@ mod test {
             fs_lock: Arc::new(RwLock::new(())),
             last_alloc_hint: Arc::new(SpinMutex::new(2)),
             fsinfo_sector: None,
+            total_clusters: 0,
         };
 
         // Attempt to traverse the circular chain - should return error, not hang
@@ -686,6 +743,7 @@ mod test {
             fs_lock: Arc::new(RwLock::new(())),
             last_alloc_hint: Arc::new(SpinMutex::new(0)),
             fsinfo_sector: None,
+            total_clusters: 0,
         };
         // Reserved clusters 0 and 1 must never be returned, even though their
         // FAT entries read as unused; the first allocatable cluster is 3.

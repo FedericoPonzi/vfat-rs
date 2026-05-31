@@ -76,6 +76,15 @@ impl FullExtendedBIOSParameterBlock {
     pub fn sectors_occupied_by_all_fats(&self) -> u32 {
         self.bpb.fat_amount as u32 * self.bpb.sectors_per_fat as u32
     }
+    /// Total number of logical sectors in the volume. FAT32 uses the 16-bit
+    /// `total_logical_sectors` field when it fits, otherwise the 32-bit one.
+    pub fn total_logical_sectors(&self) -> u32 {
+        if self.bpb.total_logical_sectors != 0 {
+            self.bpb.total_logical_sectors as u32
+        } else {
+            self.bpb.total_logical_sectors_gt_u16
+        }
+    }
 }
 
 //const_assert_size!(FullExtendedBIOSParameterBlock, 512);

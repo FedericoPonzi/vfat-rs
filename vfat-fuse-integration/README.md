@@ -43,6 +43,20 @@ the user that mounted the filesystem (matching the kernel `vfat` driver's
 default), and permissions are fixed at `0755` for directories and `0644` for
 files.
 
+## Limitations
+
+* **Out of space (`ENOSPC`) is not transactional.** When the volume fills up
+  part-way through a write, the call fails with `No space left on device`, but
+  the clusters already allocated to that write stay attached to the file (the
+  bytes written before the failure are kept, as POSIX permits for a short
+  write). The space is *not* leaked permanently: deleting the partially-written
+  file (`rm`) reclaims those clusters. So after a failed large copy you may see
+  the destination file present at a partial size; remove it to recover the
+  space. There is no automatic rollback that frees the partial allocation on
+  failure.
+* **Explicit timestamps and ownership/permissions are not persisted** — see the
+  `setattr` note above; FAT32 has no on-disk representation for them.
+
 ## Building
 
 ```bash

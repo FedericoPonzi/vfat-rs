@@ -1,0 +1,25 @@
+[package]
+name = "vfat-fuse-integration"
+version = "0.1.0"
+edition = "2021"
+description = "A userspace FUSE driver that exposes vfat-rs as a mountable FAT32 filesystem"
+license = "MIT"
+
+[lib]
+name = "vfat_fuse"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vfat-fuse"
+path = "src/main.rs"
+
+[dependencies]
+fuser = "0.17.0"
+vfat-rs = { path = "..", features = ["std"] }
+libc = "0.2"
+log = "0.4"
+env_logger = "0.11"
+
+[dev-dependencies]
+tempfile = "3"
+fatfs = "0.3"
